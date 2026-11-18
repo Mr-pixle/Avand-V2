@@ -23,8 +23,8 @@ export async function verifyPassword(pw: string, stored: string | undefined) {
 
 export const PASSWORD_MIN = 6
 export function passwordProblem(pw: unknown) {
-  if (typeof pw !== 'string' || pw.length < PASSWORD_MIN) return `رمز عبور باید دست‌کم ${PASSWORD_MIN} نویسه باشد.`
-  if (pw.length > 200) return 'رمز عبور بیش از حد بلند است.'
+  if (typeof pw !== 'string' || pw.length < PASSWORD_MIN) return `The password must be at least ${PASSWORD_MIN}.`
+  if (pw.length > 200) return "The password is too long."
   return null
 }
 

@@ -75,8 +75,8 @@ export const ArchBackdrop = memo(function ArchBackdrop() {
           <path d={`M${CX + OFF - 150},${SPRING - 222} A270,270 0 0 1 ${CX + OFF - 60},${SPRING - 263}`} stroke="currentColor" strokeWidth="1.4" />
           <path d={`M${CX + OFF - 70},${SPRING - 270} l12,4 l-11,6`} stroke="currentColor" strokeWidth="1.4" />
           <text x={CX + OFF + 14} y={SPRING - 14} fontSize="14" fill="currentColor" direction="ltr">R = 2.70</text>
-          <text x={CX - OFF - 8} y={SPRING + 26} fontSize="13" fill="currentColor" textAnchor="middle">مرکز ۱</text>
-          <text x={CX + OFF + 8} y={SPRING + 26} fontSize="13" fill="currentColor" textAnchor="middle">مرکز ۲</text>
+          <text x={CX - OFF - 8} y={SPRING + 26} fontSize="13" fill="currentColor" textAnchor="middle">Center 1</text>
+          <text x={CX + OFF + 8} y={SPRING + 26} fontSize="13" fill="currentColor" textAnchor="middle">Center 2</text>
         </g>
         {/* springing line and levels */}
         <line x1={660} y1={SPRING} x2={1340} y2={SPRING} stroke="currentColor" strokeWidth="0.9" strokeDasharray="10 6" />
@@ -95,7 +95,7 @@ export const ArchBackdrop = memo(function ArchBackdrop() {
           <text x={1250} y={(SPRING + A1) / 2} fontSize="15" textAnchor="middle" fill="currentColor" direction="ltr" transform={`rotate(-90 1250 ${(SPRING + A1) / 2})`}>2.61</text>
         </g>
         <path d={arch(R + T + 46)} stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 6" opacity="0.7" />
-        <text x={CX} y={A2 - 12} fontSize="12" textAnchor="middle" fill="currentColor">کلید قوس</text>
+        <text x={CX} y={A2 - 12} fontSize="12" textAnchor="middle" fill="currentColor">Keystone</text>
       </svg>
       {/* glass curtain wall in front of the drawing (wide screens only) */}
       <div className="absolute inset-y-0 start-0 hidden w-[52%] gap-[10px] lg:flex">

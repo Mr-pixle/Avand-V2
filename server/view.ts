@@ -4,6 +4,7 @@ import { canViewVisit, type SiteVisit } from '../src/lib/office'
 // may not see never leaves the server — hiding it in the browser is not what protects it.
 import { COLLECTIONS, SHAPES, entriesOf, type Collection, type Delta } from '../src/lib/collections'
 import { channelMembers } from '../src/lib/domain'
+import { canViewBoard, type Whiteboard } from '../src/lib/whiteboards'
 import { canSeeAllLogs, canSeeAuditEntry, canSeeRequest, canSeeTeamSpace, canSeeTimesheetOf, canViewTask, has } from '../src/lib/policy'
 import type { State } from '../src/lib/state'
 import type { AuditEntry, Leave, Task, User, WorkLog } from '../src/lib/types'
@@ -16,6 +17,7 @@ const cache = <T extends object>(fn: (x: T) => T) => {
   return (x: T) => { let y = m.get(x); if (!y) { y = fn(x); m.set(x, y) } return y }
 }
 const publicUser = cache<User>(({ password: _p, ...u }) => u as User)
+const directoryUser = cache<User>(({ password: _p, email: _email, ...u }) => u as User)
 /** Someone else's Work Log: the time counts in totals, the text and its history stay with its owner and managers */
 const redactedLog = cache<WorkLog>((l) => ({ ...l, description: '', revisions: undefined, deleteReason: undefined }))
 const noteless = cache<Leave>(({ note: _n, ...l }) => l as Leave)
@@ -55,7 +57,10 @@ export function viewOf(state: State, me: User): Entries {
       case 'deadlinePreferences': list = all.filter(([k]) => k === me.id); break
       case 'deadlineEvents': list = []; break
       case 'siteVisits': list = all.filter(([,v]) => canViewVisit(state, me, v as SiteVisit)); break
-      case 'users': list = all.filter(([, u]) => approver || ['active', 'disabled'].includes((u as User).status) || (u as User).id === me.id).map(([k, u]) => [k, publicUser(u as User)]); break
+      case 'users': list = all.filter(([, u]) => approver || ['active', 'disabled'].includes((u as User).status) || (u as User).id === me.id).map(([k, u]) => [k, (u as User).id === me.id ? publicUser(u as User) : directoryUser(u as User)]); break
+      case 'whiteboards': list = all.filter(([, board]) => canViewBoard(state, me, (board as Whiteboard).projectId)); break
+      case 'projects': list = has(me, 'project.view') ? all : []; break
+      case 'documents': case 'importantLinks': case 'folderIcons': list = has(me, 'library.view') ? all : []; break
       case 'tasks': list = all.filter(([, t]) => seeTask(t as Task)); break
       case 'allocations': list = all.filter(([k]) => seeTaskId(k)); break
       case 'comments': case 'reviewRounds': case 'attachments': list = all.filter(([, x]) => seeTaskId((x as { taskId: string }).taskId)); break

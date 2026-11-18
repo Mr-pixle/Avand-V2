@@ -38,8 +38,8 @@ export const TEAMS: Team[] = [
 
 
 export const FLOOR_LABEL: Record<string, string> = {
-  B3: 'زیرزمین سوم', B2: 'زیرزمین دوم', B1: 'زیرزمین اول', GF: 'همکف', '01': 'طبقه اول', '02': 'طبقه دوم',
-  '03': 'طبقه سوم', TYP: 'طبقات تیپ', '15': 'طبقه پانزدهم', RF: 'بام',
+  B3: 'Basement 3', B2: 'Basement 2', B1: 'Basement 1', GF: 'Ground Floor', '01': 'First Floor', '02': 'Second Floor',
+  '03': 'Third Floor', TYP: 'Typical Floors', '15': 'Fifteenth Floor', RF: 'Roof',
 }
 
 

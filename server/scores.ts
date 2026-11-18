@@ -16,13 +16,13 @@ export function workingDays(from: string, to: string, holidays: Set<string>): nu
   return count
 }
 export function taskScore(t: Task, holidays: Set<string>): Pick<ScoreRecord, 'score' | 'error' | 'duration' | 'delta'> {
-  if (!validDate(t.actualStart)) return { score: null, error: 'شروع واقعی ثبت نشده یا نامعتبر است.' }
-  if (!validDate(t.due)) return { score: null, error: 'سررسید ثبت نشده یا نامعتبر است.' }
-  if (!validDate(t.actualFinish)) return { score: null, error: 'پایان واقعی ثبت نشده یا نامعتبر است.' }
-  if (t.actualFinish < t.actualStart) return { score: null, error: 'پایان واقعی پیش از شروع واقعی است.' }
-  if (t.due <= t.actualStart) return { score: null, error: 'سررسید باید پس از شروع واقعی باشد.' }
+  if (!validDate(t.actualStart)) return { score: null, error: "The real start is unregistered or invalid." }
+  if (!validDate(t.due)) return { score: null, error: "Unregistered or invalid." }
+  if (!validDate(t.actualFinish)) return { score: null, error: "The actual end is unregistered or invalid." }
+  if (t.actualFinish < t.actualStart) return { score: null, error: "The real end is before the real start." }
+  if (t.due <= t.actualStart) return { score: null, error: "The date must be after the actual start." }
   const duration = workingDays(t.actualStart, t.due, holidays)
-  if (duration <= 0) return { score: null, error: 'بین شروع واقعی و سررسید روز کاری وجود ندارد.' }
+  if (duration <= 0) return { score: null, error: "There is no real work day between the start and the end of the day." }
   const delta = workingDays(t.due, t.actualFinish, holidays)
   return { score: 60 * (1 - delta / duration), duration, delta }
 }

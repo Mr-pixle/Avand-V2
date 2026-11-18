@@ -1,3 +1,4 @@
+import { TeamName } from '@/components/ItemIcon'
 import { supervisionStatuses,supervisionStatus } from '@/lib/supervision'
 import { SupervisionStatusSelect } from './SupervisionWorkflow'
 import { TaskStageFields } from './ProjectStages'
@@ -24,7 +25,7 @@ import { Initials, JalaliDateField, ProgressRing, StatusPill } from './common'
 import { MentionInput, RichText } from './Mention'
 import { AttachmentList, FilePicker, FlowPill, PRIORITY_FA, PriorityChip, TYPE_FA, UserSelect } from './FlowViews'
 
-const KIND_FA: Record<string, string> = { phase: 'Phase', stage: 'Stage', group: 'Group', doctype: 'Doc Type', document: 'Document', manual: 'تسک دستی', supervision: 'مورد نظارتی', internal: 'تسک تیم', finadmin: 'Task مالی و اداری' }
+const KIND_FA: Record<string, string> = { phase: 'Phase', stage: 'Stage', group: 'Group', doctype: 'Doc Type', document: 'Document', manual: 'New Manual Task', supervision: "Site Supervision Task", internal: "Team Task", finadmin: "Finance and Administration Task" }
 /** Sections A–F come from lib/taskFields.ts: the same groups order every task table and filter bar */
 const SECTIONS = FIELD_GROUPS
 type SecId = FieldGroupId
@@ -35,7 +36,7 @@ export function TaskDrawer() {
   const visible = !!t && can.viewTask(t)
   return (
     <Sheet open={visible} onOpenChange={(o) => !o && dispatch({ type: 'openTask', id: null })}>
-      <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:max-w-[600px]" dir="rtl" id="task-drawer-scroll">
+      <SheetContent side="left" className="w-full overflow-y-auto p-0 sm:max-w-[600px]" dir="ltr" id="task-drawer-scroll">
         {t && visible && <DrawerBody key={t.id} t={t} />}
       </SheetContent>
     </Sheet>
@@ -77,13 +78,13 @@ function DrawerBody({ t }: { t: Task }) {
       <div className="border-b bg-foreground/[0.03] px-5 pb-3 pt-5">
         <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted-foreground">
           {t.kind === 'internal' ? (
-            <button className="hover:text-foreground hover:underline" onClick={() => { close(); dispatch({ type: 'nav', nav: { page: 'team', teamId: t.teamSpaceId } }) }}>فضای تیم {teamById[t.teamSpaceId ?? '']?.name}</button>
+            <button className="hover:text-foreground hover:underline" onClick={() => { close(); dispatch({ type: 'nav', nav: { page: 'team', teamId: t.teamSpaceId } }) }}>Team Space <TeamName team={teamById[t.teamSpaceId ?? '']} /></button>
           ) : isFinTask(t) ? (
-            <button className="hover:text-foreground hover:underline" onClick={() => { close(); dispatch({ type: 'nav', nav: { page: 'finadmin', space: finSpaceOf(t) } }) }}>فضای مالی و اداری › {FIN_SPACE_FA[finSpaceOf(t) ?? 'finance']}</button>
+            <button className="hover:text-foreground hover:underline" onClick={() => { close(); dispatch({ type: 'nav', nav: { page: 'finadmin', space: finSpaceOf(t) } }) }}>Financial and Administrative Space › {FIN_SPACE_FA[finSpaceOf(t) ?? 'finance']}</button>
           ) : (
             <button className="hover:text-foreground hover:underline" onClick={() => { close(); dispatch({ type: 'nav', nav: { page: 'project', projectId: t.projectId } }) }}>{project?.name}</button>
           )}
-          {t.kind === 'supervision' && <span>› نظارت و اجرا</span>}
+          {t.kind === 'supervision' && <span>› Monitoring and Implementation</span>}
           {ip && <span>› {ip.name}</span>}
           {path.map((p) => (
             <span key={p.id} className="inline-flex items-center gap-1.5"><span>›</span>
@@ -94,20 +95,20 @@ function DrawerBody({ t }: { t: Task }) {
         <SheetTitle className="mt-2 pe-8 text-lg font-bold leading-snug">{t.name}</SheetTitle>
         <SheetDescription asChild>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-            <span className="rounded border bg-background px-1.5 py-0.5">{isFinTask(t) ? (finSpaceOf(t) === 'office' ? 'Task اداری' : 'Task مالی') : KIND_FA[t.kind]}</span>
+            <span className="rounded border bg-background px-1.5 py-0.5">{isFinTask(t) ? (finSpaceOf(t) === 'office' ? "Office Task" : "Financial Task") : KIND_FA[t.kind]}</span>
             {!isFlowTask(t) && (
               <span className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5', t.source === 'mdr' ? 'bg-azure-soft text-azure-ink' : 'bg-secondary text-secondary-foreground')}>
-                {t.source === 'mdr' ? <><FileSpreadsheet className="h-3 w-3" /> از MDR</> : 'دستی'}
+                {t.source === 'mdr' ? <><FileSpreadsheet className="h-3 w-3" /> the MDR</> : "Hand-held"}
               </span>
             )}
             {t.docNumber && <span className="mono text-foreground">{t.docNumber}</span>}
             {flowShown && <FlowPill state={flowShown} task={t} />}<SupervisionStatusSelect task={t} />
             <PriorityChip p={t.priority} />
-            {t.removedFromMdr && <span className="rounded bg-danger-soft px-1.5 py-0.5 text-destructive">Removed from MDR — حذف خودکار انجام نشد</span>}
+            {t.removedFromMdr && <span className="rounded bg-danger-soft px-1.5 py-0.5 text-destructive">Removed from MDR — Automatic removal not done</span>}
           </div>
         </SheetDescription>
         {leaf && (
-          <nav className="glass-seg mt-3 flex w-max max-w-full gap-0.5 overflow-x-auto !rounded-full p-0.5 thin-scroll" aria-label="بخش‌های تسک">
+          <nav className="glass-seg mt-3 flex w-max max-w-full gap-0.5 overflow-x-auto !rounded-full p-0.5 thin-scroll" aria-label="Category: Parts of Task">
             {SECTIONS.map((s) => (
               <button key={s.id} type="button" onClick={() => jump(s.id)} title={s.title} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full px-2.5 text-[11.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground">
                 <span className="mono font-bold text-foreground">{s.letter}</span><span className="hidden sm:inline">{s.short}</span>
@@ -166,28 +167,28 @@ function ParentBody({ t }: { t: Task }) {
   return (
     <>
       <section className="border-b px-5 py-4">
-        <h3 className="mb-3 text-[13px] font-semibold">Roll-up از زیرمجموعه‌ها</h3>
+        <h3 className="mb-3 text-[13px] font-semibold">Roll-up of subheadings</h3>
         <div className="flex items-center gap-4">
           <ProgressRing value={r?.progress ?? 0} size={64} stroke={5} />
           <div className="grid flex-1 grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
-            <div><div className="eyebrow">Progress وزنی</div><div className="num font-semibold">{pct(r?.progress ?? 0)}</div></div>
-            <div><div className="eyebrow">صادرشده</div><div className="num font-semibold">{n(r?.done ?? 0)} از {n(r?.items ?? 0)}</div></div>
-            <div><div className="eyebrow">Estimation</div><div className="num font-semibold">{n(r?.est ?? 0)} نفر-ساعت</div></div>
-            <div><div className="eyebrow">بازه</div><div className="num font-semibold">{d(r?.start)} ← {d(r?.due)}</div></div>
+            <div><div className="eyebrow">Progress Weight</div><div className="num font-semibold">{pct(r?.progress ?? 0)}</div></div>
+            <div><div className="eyebrow">Exported</div><div className="num font-semibold">{n(r?.done ?? 0)} from {n(r?.items ?? 0)}</div></div>
+            <div><div className="eyebrow">Estimation</div><div className="num font-semibold">{n(r?.est ?? 0)} Person-hours</div></div>
+            <div><div className="eyebrow">Date Range</div><div className="num font-semibold">{d(r?.start)} ← {d(r?.due)}</div></div>
           </div>
         </div>
-        <p className="mt-3 text-[12px] text-muted-foreground">تسک‌های والد قابل تخصیص و Estimation نیستند؛ Progress، Estimation و بازه‌ی زمانی از Documentها و تسک‌های دستی زیرمجموعه جمع می‌شود. Progress والد با Weight هر فرزند وزن‌دهی می‌شود.</p>
-        {(r?.unassigned ?? 0) > 0 && <p className="mt-2 text-[12px]"><span className="num font-semibold">{n(r.unassigned)}</span> تسک این شاخه در استخر Unassigned است.</p>}
+        <p className="mt-3 text-[12px] text-muted-foreground">Parent’s Tasks Are Not Degradable And Estimation; Progress, Estimation, And Time Range Of Document And Sub-manual Tasks Are Collected. Parent’s Progress Is Weighted With Each Child’s Weight.</p>
+        {(r?.unassigned ?? 0) > 0 && <p className="mt-2 text-[12px]"><span className="num font-semibold">{n(r.unassigned)}</span> This branch is located in the unassigned pool.</p>}
       </section>
       {canOverride && (
         <section className="border-b px-5 py-4">
-          <h3 className="mb-3 text-[13px] font-semibold">Status Set این بخش</h3>
+          <h3 className="mb-3 text-[13px] font-semibold">Status Set This section</h3>
           <div className="flex flex-wrap items-center gap-1.5">{state.statusSets[scope].map((s) => <StatusPill key={s.id} status={s} />)}</div>
-          <p className="mt-2 text-[12px] text-muted-foreground">{own ? 'این بخش Status Set خودش را دارد (Override) و زیرمجموعه‌ها از آن ارث می‌برند.' : 'از بخش یا پروژه‌ی بالاتر ارث می‌برد.'} مدیریت در «مدیریت › Statusها».</p>
+          <p className="mt-2 text-[12px] text-muted-foreground">{own ? "This section has its own Status Set (Override) and subsections inherit it." : "It inherits from the higher part or project."} Management in “Management of States.”</p>
         </section>
       )}
       <section className="border-b px-5 py-4">
-        <h3 className="mb-3 text-[13px] font-semibold">زیرمجموعه‌ها ({n(ch.length)})</h3>
+        <h3 className="mb-3 text-[13px] font-semibold">Subdivisions ({n(ch.length)})</h3>
         <div className="flex flex-col divide-y overflow-hidden rounded-xl border bg-background/45">
           {ch.map((c) => {
             const cr = roll[c.id]
@@ -195,13 +196,13 @@ function ParentBody({ t }: { t: Task }) {
               <button key={c.id} className={cn('flex items-center gap-2 px-3 py-2 text-start text-[13px] hover:bg-foreground/[0.035]', c.removedFromMdr && 'opacity-60')} onClick={() => dispatch({ type: 'openTask', id: c.id })}>
                 <ProgressRing task={c} value={cr?.progress ?? 0} size={18} stroke={2.5} label={false} />
                 <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                {c.weight != null && <span className={cn('num text-[11px]', c.weightDerived ? 'text-azure' : 'text-muted-foreground')}>وزن {n(c.weight, 1)}{c.weightDerived ? '*' : ''}</span>}
+                {c.weight != null && <span className={cn('num text-[11px]', c.weightDerived ? 'text-azure' : 'text-muted-foreground')}>Weight {n(c.weight, 1)}{c.weightDerived ? '*' : ''}</span>}
                 {isWorkItem(c) && <StatusPill task={c} status={statusOf(state, c)} />}
               </button>
             )
           })}
         </div>
-        {ch.some((c) => c.weightDerived) && <p className="mt-2 text-[11.5px] text-muted-foreground">* Weight این سندها در MDR خالی بود؛ وزن والد به‌طور مساوی تقسیم شد.</p>}
+        {ch.some((c) => c.weightDerived) && <p className="mt-2 text-[11.5px] text-muted-foreground">* Weight of these documents was empty in MDR; the parent’s weight was equally divided.</p>}
       </section>
     </>
   )
@@ -211,8 +212,8 @@ function ParentBody({ t }: { t: Task }) {
 function IdentityList({ t }: { t: Task }) {
   const { state, teamById } = useStore()
   const { n } = useFmt()
-  const source = isWorkItem(t) ? (t.source === 'mdr' ? `MDR — ردیف ${n(t.mdrRow ?? 0)}` : 'دستی')
-    : t.kind === 'supervision' ? 'نظارت و اجرا' : t.kind === 'internal' ? `فضای تیم ${teamById[t.teamSpaceId ?? '']?.name ?? ''}` : FIN_SPACE_FA[finSpaceOf(t) ?? 'finance']
+  const source = isWorkItem(t) ? (t.source === 'mdr' ? `MDR — Row ${n(t.mdrRow ?? 0)}` : "Hand-held")
+    : t.kind === 'supervision' ? 'Site Supervision' : t.kind === 'internal' ? `Team Space ${teamById[t.teamSpaceId ?? '']?.name ?? ''}` : FIN_SPACE_FA[finSpaceOf(t) ?? 'finance']
   const parent = t.kind === 'manual' && t.parentId ? state.tasks[t.parentId] : undefined
   // a manual subtask is classified like the document it belongs to
   const pkg = t.pkg ?? parent?.pkg
@@ -225,8 +226,8 @@ function IdentityList({ t }: { t: Task }) {
         {hasField(t, 'pkg') && <Field label={L('pkg')}><span className="mono">{pkg ?? '—'}</span></Field>}
         {hasField(t, 'floor') && <Field label={L('floor')}><span className="mono">{floor && floor !== '—' ? floor : '—'}</span></Field>}
       </dl>
-      {t.source === 'mdr' && <p className="mt-2 text-[11px] text-muted-foreground">این مقادیر از MDR می‌آیند و فقط با Sync تغییر می‌کنند.</p>}
-      {parent && <p className="mt-2 text-[11px] text-muted-foreground">زیرتسک سند «{parent.name}»؛ Package و Floor از همان سند است.</p>}
+      {t.source === 'mdr' && <p className="mt-2 text-[11px] text-muted-foreground">These values come from MDR and only change with Sync.</p>}
+      {parent && <p className="mt-2 text-[11px] text-muted-foreground">Zirtsk Document &quot;{parent.name}The package and floor are the same document.</p>}
     </div>
   )
 }
@@ -239,14 +240,14 @@ function SectionA({ t }: { t: Task }) {
   const [f, setF] = useState(init)
   const dirty = JSON.stringify(f) !== JSON.stringify(init)
   const save = () => {
-    if (!f.name.trim()) { toast.error('عنوان خالی است.'); return }
+    if (!f.name.trim()) { toast.error("The title is empty."); return }
     const patch: Partial<Task> = { description: f.description.trim() || undefined, priority: f.priority as Priority }
     if (hasField(t, 'type')) patch.type = f.type as TaskType
     if (t.kind === 'manual') patch.name = f.name.trim()
     if (isFlowTask(t)) Object.assign(patch, { name: f.name.trim(), location: t.kind === 'supervision' ? f.location.trim() || undefined : undefined })
     if (t.kind === 'internal' && !t.parentId) patch.internalProjectId = f.ip === 'none' ? undefined : f.ip
     dispatch({ type: 'updateTask', taskId: t.id, patch })
-    toast.success('مشخصات تسک ذخیره شد')
+    toast.success("Specification of the relief is stored")
   }
   const sub = t.kind === 'document' ? (kids[t.id] ?? []).filter((c) => c.kind === 'manual') : t.kind === 'internal' ? Object.values(state.tasks).filter((c) => c.parentId === t.id) : []
   const [subName, setSubName] = useState('')
@@ -260,10 +261,10 @@ function SectionA({ t }: { t: Task }) {
       dispatch({ type: 'createFlowTask', task: { id: `IN-${Date.now().toString(36).toUpperCase()}`, projectId: t.projectId, parentId: t.id, kind: 'internal', name: subName.trim(), source: 'manual', order: t.order + 0.5, teamSpaceId: t.teamSpaceId, internalProjectId: t.internalProjectId, priority: 'normal', type: t.type } })
     }
     setSubName('')
-    toast.success('زیرتسک ساخته شد', { description: 'برای ارجاع و برنامه‌ریزی، آن را باز کنید.' })
+    toast.success("Zirtsk", { description: "For reference and planning, open it." })
   }
   return (
-    <Section id="a" aside={!editable ? <LockNote text="فقط خواندنی" /> : undefined}>
+    <Section id="a" aside={!editable ? <LockNote text="Read Only" /> : undefined}>
       <IdentityList t={t} />
       {isWorkItem(t) && <TaskStageFields key={`${t.id}-${t.projectStage}-${t.workScope}`} task={t} />}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -290,16 +291,16 @@ function SectionA({ t }: { t: Task }) {
             <Label htmlFor="a-ip" className="eyebrow">{L('internalProjectId')}</Label>
             <Select value={f.ip} onValueChange={(v) => setF({ ...f, ip: v })} disabled={!editable}>
               <SelectTrigger id="a-ip" className="mt-1 h-9"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="none">بدون پروژه‌ی داخلی</SelectItem>{state.internalProjects.filter((p) => p.teamId === t.teamSpaceId).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              <SelectContent><SelectItem value="none">Without an internal project</SelectItem>{state.internalProjects.filter((p) => p.teamId === t.teamSpaceId).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         )}
-        <div className="sm:col-span-2"><Label htmlFor="a-desc" className="eyebrow">{L('description')}</Label><Textarea id="a-desc" className="mt-1 min-h-[64px]" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} disabled={!editable} placeholder={editable ? 'شرح کار، محدوده و نکته‌های تحویل' : 'شرحی ثبت نشده'} /></div>
+        <div className="sm:col-span-2"><Label htmlFor="a-desc" className="eyebrow">{L('description')}</Label><Textarea id="a-desc" className="mt-1 min-h-[64px]" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} disabled={!editable} placeholder={editable ? "Job Description, Range and Delivery Tips" : "Unregistered description"} /></div>
       </div>
       {editable && dirty && (
         <div className="mt-3 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setF(init)}>بازگردانی</Button>
-          <Button size="sm" onClick={save}>ذخیره‌ی مشخصات</Button>
+          <Button variant="ghost" size="sm" onClick={() => setF(init)}>Back!</Button>
+          <Button size="sm" onClick={save}>Save Profile</Button>
         </div>
       )}
 
@@ -308,7 +309,7 @@ function SectionA({ t }: { t: Task }) {
           <div className="eyebrow mb-2">{L('subtasks')} ({n(sub.length)})</div>
           {!!t.mdrSubtasks?.length && (
             <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px]" id="mdr-subtasks">
-              <span className="text-muted-foreground">مراحل کار در MDR:</span>
+              <span className="text-muted-foreground">Steps to work in MDR:</span>
               {t.mdrSubtasks.map((x) => <span key={x} className="rounded-full border bg-background/60 px-2 py-0.5">{x}</span>)}
             </div>
           )}
@@ -324,10 +325,10 @@ function SectionA({ t }: { t: Task }) {
           )}
           {canAddSub ? (
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); addSub() }}>
-              <Input id="drawer-subtask" value={subName} onChange={(e) => setSubName(e.target.value)} placeholder="مثلاً: رندر، ارائه، طراحی جزئیات" className="h-9" />
-              <Button type="submit" variant="outline" className="h-9"><Plus className="h-4 w-4" /> افزودن</Button>
+              <Input id="drawer-subtask" value={subName} onChange={(e) => setSubName(e.target.value)} placeholder="For example: rendering, presentation, detail design" className="h-9" />
+              <Button type="submit" variant="outline" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
             </form>
-          ) : <p className="text-[12px] text-muted-foreground">زیرتسک را برنامه‌ریز همین تسک می‌سازد.</p>}
+          ) : <p className="text-[12px] text-muted-foreground">This makes it easy for the programmer to do so.</p>}
         </div>
       )}
     </Section>
@@ -356,10 +357,10 @@ function SectionB({ t, plan }: { t: Task; plan?: Plan }) {
   const reviewerPool = t.kind === 'supervision' ? activeUsers.filter((u) => u.role === 'inspector' || u.role === 'ceo') : t.kind === 'internal' || isFinTask(t) ? executors : activeUsers
   const reviewLocked = t.flow === 'in_review'
   const setReviewer = (id?: string) => {
-    if (id && id === t.assigneeUserId) { toast.error('Reviewer نمی‌تواند مسئول همین تسک باشد.'); return }
-    if (t.kind === 'supervision' && !id) { toast.error('مورد نظارتی باید Reviewer داشته باشد.'); return }
+    if (id && id === t.assigneeUserId) { toast.error("The reviewer cannot be responsible for this task."); return }
+    if (t.kind === 'supervision' && !id) { toast.error("The monitor should have a reviewer."); return }
     dispatch({ type: 'updateTask', taskId: t.id, patch: { reviewerId: id } })
-    toast.success(id ? `Reviewer: ${userById[id]?.name}` : 'Reviewer برداشته شد')
+    toast.success(id ? `Reviewer: ${userById[id]?.name}` : "Reviewer has been removed")
   }
   const parts = t.participantIds ?? []
   const addPart = (id?: string) => { if (id && !parts.includes(id)) dispatch({ type: 'updateTask', taskId: t.id, patch: { participantIds: [...parts, id] } }) }
@@ -367,9 +368,9 @@ function SectionB({ t, plan }: { t: Task; plan?: Plan }) {
   const assignNow = () => {
     if (!assignee) return
     dispatch({ type: 'flow', taskId: t.id, op: 'assign', assigneeId: assignee })
-    toast.success(`ارجاع به ${userById[assignee]?.name}`, { description: `${L('assignee')} اعلان گرفت.` })
+    toast.success(`Reference to ${userById[assignee]?.name}`, { description: `${L('assignee')} was announced.` })
   }
-  const lockText = !flow ? 'تعیین افراد با برنامه‌ریز' : isFinTask(t) ? 'ارجاع با مدیرعامل یا سازنده‌ی Task' : 'ارجاع با ناظر یا سرپرست'
+  const lockText = !flow ? "Determine the people with the planner" : isFinTask(t) ? "Referral with a Task Manager or Manufacturer" : "Referral with supervisor or supervisor"
   return (
     <Section id="b" aside={!manage ? <LockNote text={lockText} /> : undefined}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -377,15 +378,15 @@ function SectionB({ t, plan }: { t: Task; plan?: Plan }) {
           <div className="sm:col-span-2">
             <Label htmlFor="b-assignee" className="eyebrow">{L('assignee')}</Label>
             <div className="flex gap-2">
-              <div className="flex-1"><UserSelect id="b-assignee" value={assignee} onChange={setAssignee} users={executors.filter((u) => u.id !== t.reviewerId)} grouped={t.kind === 'supervision'} noneLabel={`بدون ${L('assignee')}`} disabled={!manage || f === 'closed' || f === 'in_review'} /></div>
-              {manage && assignee && assignee !== t.assigneeUserId && f !== 'closed' && f !== 'in_review' && <Button className="mt-1 h-9" onClick={assignNow}><Send className="h-4 w-4" /> ارجاع</Button>}
+              <div className="flex-1"><UserSelect id="b-assignee" value={assignee} onChange={setAssignee} users={executors.filter((u) => u.id !== t.reviewerId)} grouped={t.kind === 'supervision'} noneLabel={`No ${L('assignee')}`} disabled={!manage || f === 'closed' || f === 'in_review'} /></div>
+              {manage && assignee && assignee !== t.assigneeUserId && f !== 'closed' && f !== 'in_review' && <Button className="mt-1 h-9" onClick={assignNow}><Send className="h-4 w-4" /> References</Button>}
             </div>
           </div>
         ) : plan && <ResourceField t={t} plan={plan} />}
         <PersonLine label={L('reporter')} user={userById[t.reporterId ?? t.createdBy ?? '']} empty={t.source === 'mdr' ? 'MDR' : '—'} />
         <div>
           <Label htmlFor="b-reviewer" className="eyebrow">{L('reviewer')}</Label>
-          <UserSelect id="b-reviewer" value={t.reviewerId} onChange={setReviewer} users={reviewerPool.filter((u) => u.id !== t.assigneeUserId)} noneLabel={t.kind === 'supervision' ? undefined : 'بدون Reviewer'} disabled={!manage || reviewLocked} />
+          <UserSelect id="b-reviewer" value={t.reviewerId} onChange={setReviewer} users={reviewerPool.filter((u) => u.id !== t.assigneeUserId)} noneLabel={t.kind === 'supervision' ? undefined : "No Reviewer"} disabled={!manage || reviewLocked} />
         </div>
         <div className="sm:col-span-2">
           <div className="eyebrow">{L('participants')}</div>
@@ -393,13 +394,13 @@ function SectionB({ t, plan }: { t: Task; plan?: Plan }) {
             {parts.map((id) => (
               <span key={id} className="inline-flex items-center gap-1.5 rounded-full border bg-background/60 py-0.5 pe-1 ps-0.5 text-[12px]">
                 <Initials user={userById[id]} size={20} />{userById[id]?.name}
-                {manage && <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`حذف ${userById[id]?.name}`} onClick={() => removePart(id)}><X className="h-3 w-3" /></button>}
+                {manage && <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`Deleted ${userById[id]?.name}`} onClick={() => removePart(id)}><X className="h-3 w-3" /></button>}
               </span>
             ))}
             {!parts.length && !manage && <span className="text-[12px] text-muted-foreground">—</span>}
             {manage && (
               <Select value="" onValueChange={(v) => addPart(v)}>
-                <SelectTrigger id="b-add-part" className="h-8 w-[170px] text-[12px]"><SelectValue placeholder="+ افزودن نفر" /></SelectTrigger>
+                <SelectTrigger id="b-add-part" className="h-8 w-[170px] text-[12px]"><SelectValue placeholder="+ Add Person" /></SelectTrigger>
                 <SelectContent className="max-h-72">{executors.filter((u) => !parts.includes(u.id) && u.id !== t.assigneeUserId).map((u) => <SelectItem key={u.id} value={u.id}><span className="inline-flex items-center gap-2"><Initials user={u} size={18} />{u.name}</span></SelectItem>)}</SelectContent>
               </Select>
             )}
@@ -417,17 +418,17 @@ function ResourceField({ t, plan }: { t: Task; plan: Plan }) {
   const { res, setRes, canPlan, teamsOrdered, resDirty, validation, save } = plan
   return (
     <div className="sm:col-span-2">
-      <Label htmlFor="drawer-assignee" className="eyebrow">{L('assignee')} (تیم یا نفر)</Label>
+      <Label htmlFor="drawer-assignee" className="eyebrow">{L('assignee')} (team or person)</Label>
       {canPlan ? (
         <Select value={resourceKey(res)} onValueChange={(v) => setRes(parseKey(v))}>
           <SelectTrigger id="drawer-assignee" className="mt-1 h-9"><SelectValue /></SelectTrigger>
           <SelectContent className="max-h-80">
-            {store.can.assignTo(t, null) && <SelectItem value="none">بدون تخصیص (Unassigned)</SelectItem>}
+            {store.can.assignTo(t, null) && <SelectItem value="none">Unassigned</SelectItem>}
             {store.activeUsers.filter((u) => !u.teamId && u.capacity > 0 && store.can.assignTo(t, { kind: 'user', id: u.id })).map((u) => <SelectItem key={u.id} value={`user:${u.id}`}>{u.name}</SelectItem>)}
             {teamsOrdered.map((tm) => (
               <SelectGroup key={tm.id}>
                 <SelectLabel className="text-[11px] text-muted-foreground">{tm.name}</SelectLabel>
-                {store.can.assignTo(t, { kind: 'team', id: tm.id }) && <SelectItem value={`team:${tm.id}`}><span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> کل تیم {tm.name}</span></SelectItem>}
+                {store.can.assignTo(t, { kind: 'team', id: tm.id }) && <SelectItem value={`team:${tm.id}`}><span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> The entire team {tm.name}</span></SelectItem>}
                 {store.activeUsers.filter((u) => u.teamId === tm.id && u.capacity > 0 && store.can.assignTo(t, { kind: 'user', id: u.id })).map((u) => <SelectItem key={u.id} value={`user:${u.id}`}><span className="inline-flex items-center gap-2"><Initials user={u} size={20} />{u.name}</span></SelectItem>)}
               </SelectGroup>
             ))}
@@ -436,15 +437,15 @@ function ResourceField({ t, plan }: { t: Task; plan: Plan }) {
       ) : (
         <div id="drawer-assignee" className="mt-1 flex h-9 items-center gap-2 text-[13px]">
           {t.assigneeUserId ? <><Initials user={userById[t.assigneeUserId]} size={24} />{userById[t.assigneeUserId]?.name}</>
-            : t.assigneeTeamId ? <><Users className="h-4 w-4" /> تیم {teamById[t.assigneeTeamId]?.name}</> : <span className="text-muted-foreground">بدون تخصیص (Unassigned)</span>}
+            : t.assigneeTeamId ? <><Users className="h-4 w-4" /> Team <TeamName team={teamById[t.assigneeTeamId]} /></> : <span className="text-muted-foreground">Unassigned</span>}
         </div>
       )}
       {resDirty && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px]">
           {validation && !validation.ok
-            ? <button type="button" className="inline-flex items-center gap-1 font-medium text-destructive hover:underline" onClick={() => jump('c')}><AlertTriangle className="h-3.5 w-3.5" /> با Start و Due فعلی تخصیص بیش از حد می‌شود — بخش C</button>
-            : <span className="text-muted-foreground">تخصیص تازه با ظرفیت بازه‌ی Start تا Due (بخش C) سنجیده می‌شود.</span>}
-          <Button size="sm" className="h-7" onClick={save}>ذخیره‌ی تخصیص</Button>
+            ? <button type="button" className="inline-flex items-center gap-1 font-medium text-destructive hover:underline" onClick={() => jump('c')}><AlertTriangle className="h-3.5 w-3.5" /> With Start and Due the current allocation becomes too much — Section C</button>
+            : <span className="text-muted-foreground">The new allocation is measured with a starting to due (section C) range capacity.</span>}
+          <Button size="sm" className="h-7" onClick={save}>Save allocation</Button>
         </div>
       )}
     </div>
@@ -480,28 +481,28 @@ function usePlan(t: Task) {
     if (!res || !start || !due || !estN) return null
     return planner.validate(res, start, due, estN)
   }, [planner, res, start, due, estN])
-  const resName = res ? (res.kind === 'user' ? userById[res.id]?.name : `تیم ${teamById[res.id]?.name}`) : ''
+  const resName = res ? (res.kind === 'user' ? userById[res.id]?.name : `Team ${teamById[res.id]?.name}`) : ''
   const project = projectById[t.projectId]
   const relatedTeams = [project.phase1TeamId, project.phase2TeamId, 'rvt', 'ctl', 'rd', 'int', 'prs', 'ren']
   const teamsOrdered = [...state.teams].filter((tm) => !tm.archived && (!leadOnly || tm.id === me.teamId) && (can.assignTo(t, { kind: 'team', id: tm.id }) || store.activeUsers.some((u) => u.teamId === tm.id && can.assignTo(t, { kind: 'user', id: u.id })))).sort((a, b) => (relatedTeams.indexOf(a.id) === -1 ? 99 : relatedTeams.indexOf(a.id)) - (relatedTeams.indexOf(b.id) === -1 ? 99 : relatedTeams.indexOf(b.id)))
   const suggest = () => {
-    if (!res || !start || !estN) { toast.error('برای پیشنهاد Due Date، مسئول (بخش B)، Start و Estimation را وارد کنید.'); return }
+    if (!res || !start || !estN) { toast.error("For the Due Date offer, enter the responsible (section B), Start and Estimation."); return }
     const sd = planner.suggestDue(res, start, estN)
-    if (!sd) { toast.error('در افق برنامه‌ریزی ظرفیت آزاد کافی پیدا نشد.'); return }
+    if (!sd) { toast.error("There was not enough free capacity planning on the horizon."); return }
     setDue(sd)
-    toast.success(`Due Date پیشنهادی: ${d(sd)}`, { description: `نزدیک‌ترین تاریخی که ${n(estN)} نفر-ساعت در ظرفیت آزاد ${resName} جا می‌شود.` })
+    toast.success(`Due Date Offer: ${d(sd)}`, { description: `The nearest date ${n(estN)} is in free capacity ${resName}.` })
   }
   const save = () => {
-    if (start && due && due < start) { toast.error('Due Date قبل از Start است.'); return }
+    if (start && due && due < start) { toast.error("Due date is before the start."); return }
     if (res && start && due && estN) {
       const v = planner.validate(res, start, due, estN)
-      if (!v.ok) { toast.error('ذخیره انجام نشد: تخصیص بیش از حد', { description: 'جزئیات را در بخش C ببینید و Due Date، Start یا مسئول را تغییر دهید.' }); jump('c'); return }
+      if (!v.ok) { toast.error("Storage not done: Over-departure", { description: "See details in section C and change due date, start or responsible." }); jump('c'); return }
       const teamId = res.kind === 'team' ? res.id : userById[res.id].teamId
       dispatch({ type: 'savePlan', taskId: t.id, assignee: res, estimation: estN, start, due, allocations: toAllocations(t.id, res, teamId, v.days) })
     } else {
       dispatch({ type: 'savePlan', taskId: t.id, assignee: res, estimation: estN || undefined, start, due, allocations: [] })
     }
-    toast.success('برنامه‌ریزی ذخیره شد', { description: res ? undefined : 'تسک در استخر Unassigned کنترل پروژه ماند.' })
+    toast.success("Scheduled Saved", { description: res ? undefined : "Task remained in the Unassigned Project Control Pool." })
   }
   const reset = () => { setRes(initialRes); setEst(t.estimation ? String(t.estimation) : ''); setStart(t.start); setDue(t.due) }
   return { res, setRes, est, setEst, estN, start, setStart, due, setDue, dirty, resDirty, validation, resName, suggest, save, reset, canPlan, leadOnly, teamsOrdered }
@@ -515,15 +516,15 @@ function PlanningSection({ t, plan }: { t: Task; plan: Plan }) {
   const depOptions = useMemo(() => Object.values(state.tasks).filter((x) => isWorkItem(x) && x.projectId === t.projectId && x.id !== t.id && !(t.dependsOn ?? []).includes(x.id) && !(x.dependsOn ?? []).includes(t.id)).sort((a, b) => a.order - b.order).slice(0, 200), [state.tasks, t])
   const openDeps = deps.filter((x) => statusOf(state, x)?.category !== 'done')
   return (
-    <Section id="c" aside={!canPlan ? <LockNote text="کنترل پروژه، مدیر پروژه یا سرپرست تیم" /> : leadOnly ? <span className="text-[11.5px] text-muted-foreground">سرپرست: فقط داخل تیم خود</span> : undefined}>
+    <Section id="c" aside={!canPlan ? <LockNote text="Project control, project manager or team supervisor" /> : leadOnly ? <span className="text-[11.5px] text-muted-foreground">Supervisor: Only inside your team</span> : undefined}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="drawer-est" className="eyebrow">{LU('estimation')}</Label>
           <Input id="drawer-est" type="number" min={0} step={0.5} inputMode="decimal" className="num mt-1 h-9" value={est} onChange={(e) => setEst(e.target.value)} disabled={!canPlan} />
-          {t.baselineEstimation != null && <div className="mt-1 text-[11px] text-muted-foreground">{L('baselineEstimation')}: <span className="num">{n(t.baselineEstimation)}</span>{t.estimation != null && t.baselineEstimation !== t.estimation && <span className="text-destructive"> — تغییر کرده</span>}</div>}
+          {t.baselineEstimation != null && <div className="mt-1 text-[11px] text-muted-foreground">{L('baselineEstimation')}: <span className="num">{n(t.baselineEstimation)}</span>{t.estimation != null && t.baselineEstimation !== t.estimation && <span className="text-destructive"> — has changed</span>}</div>}
         </div>
         <div className="flex items-end">
-          <Button type="button" variant="outline" className="h-9 w-full" onClick={suggest} disabled={!canPlan}><Sparkles className="h-4 w-4 text-azure" /> پیشنهاد Due Date</Button>
+          <Button type="button" variant="outline" className="h-9 w-full" onClick={suggest} disabled={!canPlan}><Sparkles className="h-4 w-4 text-azure" /> Due Date Offer</Button>
         </div>
         <div>
           <Label htmlFor="drawer-start" className="eyebrow">{L('start')}</Label>
@@ -532,7 +533,7 @@ function PlanningSection({ t, plan }: { t: Task; plan: Plan }) {
         <div>
           <Label htmlFor="drawer-due" className="eyebrow">{L('due')}</Label>
           <div className="mt-1"><JalaliDateField id="drawer-due" value={due} onChange={setDue} disabled={!canPlan} /></div>
-          {t.baselineDue && <div className="mt-1 text-[11px] text-muted-foreground">{L('baselineDue')}: <span className="num">{d(t.baselineDue)}</span>{t.due && t.baselineDue !== t.due && <span className="text-destructive"> — تغییر کرده</span>}</div>}
+          {t.baselineDue && <div className="mt-1 text-[11px] text-muted-foreground">{L('baselineDue')}: <span className="num">{d(t.baselineDue)}</span>{t.due && t.baselineDue !== t.due && <span className="text-destructive"> — has changed</span>}</div>}
         </div>
         {hasField(t, 'planIssue') && (
           <dl className="sm:col-span-2"><Field label={`${L('planIssue')} (MDR)`}><span className="num">{d(t.planIssue)}</span></Field></dl>
@@ -541,27 +542,27 @@ function PlanningSection({ t, plan }: { t: Task; plan: Plan }) {
 
       {validation && validation.ok && (
         <div className="mt-4 rounded-xl border border-leaf/30 bg-leaf-soft px-3 py-2.5 text-[12.5px] text-leaf-ink">
-          <div className="flex items-center gap-1.5 font-medium"><CheckCircle2 className="h-4 w-4" /> در ظرفیت جا می‌شود</div>
-          <div className="num mt-0.5">ساعات آزاد {resName} بین Start و Due: {h(validation.free)} — Estimation: {h(estN)}</div>
+          <div className="flex items-center gap-1.5 font-medium"><CheckCircle2 className="h-4 w-4" /> fit in capacity</div>
+          <div className="num mt-0.5">Available Hours {resName} Between Start and Due: {h(validation.free)} — Estimation: {h(estN)}</div>
         </div>
       )}
       {validation && !validation.ok && (
         <div className="mt-4 rounded-xl border border-destructive/40 bg-danger-soft px-3 py-2.5 text-[12.5px]" role="alert">
-          <div className="flex items-center gap-1.5 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" /> تخصیص بیش از حد</div>
-          {validation.reason === 'range' ? <div className="mt-1">Due Date قبل از Start است.</div> : (
+          <div className="flex items-center gap-1.5 font-semibold text-destructive"><AlertTriangle className="h-4 w-4" /> Too much allocation</div>
+          {validation.reason === 'range' ? <div className="mt-1">Due date is before the start.</div> : (
             <div className="num mt-1 leading-relaxed">
-              {resName} بین {d(start)} تا {d(due)} فقط {h(validation.free)} ساعت آزاد دارد؛ <b>{h(validation.excess)} مازاد</b> نسبت به Estimation.
-              {validation.fullDays.length > 0 && <> روزهای پر: {validation.fullDays.slice(0, 6).map((x) => dShort(x)).join('، ')}{validation.fullDays.length > 6 ? ' …' : ''}.</>}
-              <div className="mt-1 text-muted-foreground">Due Date را عقب ببرید، Start را جلو بیاورید یا تسک را به نفر/تیم دیگری بدهید (بخش B). دکمه‌ی «پیشنهاد Due Date» نزدیک‌ترین تاریخ ممکن را پیدا می‌کند.</div>
+              {resName} Bian {d(start)} to {d(due)} Just... {h(validation.free)} The clock is free; <b>{h(validation.excess)} Extras</b> It's about Estimation.
+              {validation.fullDays.length > 0 && <> Full days: {validation.fullDays.slice(0, 6).map((x) => dShort(x)).join(', ')}{validation.fullDays.length > 6 ? ' …' : ''}.</>}
+              <div className="mt-1 text-muted-foreground">Take the Due Date back, take the Start forward, or give the Task to another person/team (section B). The “Due Date Offer” button will find the nearest date possible.</div>
             </div>
           )}
         </div>
       )}
-      {res && (!start || !estN) && canPlan && <p className="mt-3 text-[12px] text-muted-foreground">برای ساختن Allocation روزبه‌روز، Start و Estimation لازم است.</p>}
-      {!res && canPlan && <p className="mt-3 text-[12px] text-muted-foreground">مسئول در بخش B تعیین می‌شود؛ Allocation روزبه‌روز با همان مسئول ساخته می‌شود.</p>}
+      {res && (!start || !estN) && canPlan && <p className="mt-3 text-[12px] text-muted-foreground">It is necessary to build an everyday Allocation, Start and Estimation.</p>}
+      {!res && canPlan && <p className="mt-3 text-[12px] text-muted-foreground">The responsible is determined in Section B; the location is built day by day with the same responsibility.</p>}
       {validation && validation.days.length > 0 && (
         <div className="mt-4">
-          <div className="eyebrow mb-2">{L('allocation')} روزبه‌روز (پر کردن از Start)</div>
+          <div className="eyebrow mb-2">{L('allocation')} Day by day (Filling from Start)</div>
           <div className="scroll-x thin-scroll">
             <div className="flex items-end gap-1 pb-1">
               {validation.days.map((x) => (
@@ -577,8 +578,8 @@ function PlanningSection({ t, plan }: { t: Task; plan: Plan }) {
       )}
       {canPlan && (
         <div className="mt-4 flex items-center justify-end gap-2">
-          {dirty && <Button variant="ghost" onClick={reset}>بازگردانی</Button>}
-          <Button onClick={save} disabled={!dirty}>ذخیره‌ی برنامه‌ریزی</Button>
+          {dirty && <Button variant="ghost" onClick={reset}>Back!</Button>}
+          <Button onClick={save} disabled={!dirty}>Save Planning</Button>
         </div>
       )}
       <AllocationSummary t={t} />
@@ -591,18 +592,18 @@ function PlanningSection({ t, plan }: { t: Task; plan: Plan }) {
               <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <button className="min-w-0 flex-1 truncate text-start hover:underline" onClick={() => dispatch({ type: 'openTask', id: x.id })}>{x.docNumber ?? x.name}</button>
               <StatusPill task={x} status={statusOf(state, x)} />
-              {canPlan && <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label="حذف پیش‌نیاز" onClick={() => dispatch({ type: 'updateTask', taskId: t.id, patch: { dependsOn: (t.dependsOn ?? []).filter((y) => y !== x.id) } })}><X className="h-3 w-3" /></button>}
+              {canPlan && <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label="Remove Prerequisites" onClick={() => dispatch({ type: 'updateTask', taskId: t.id, patch: { dependsOn: (t.dependsOn ?? []).filter((y) => y !== x.id) } })}><X className="h-3 w-3" /></button>}
             </div>
           ))}
-          {!deps.length && <span className="text-[12px] text-muted-foreground">پیش‌نیازی ثبت نشده.</span>}
+          {!deps.length && <span className="text-[12px] text-muted-foreground">No need to register.</span>}
           {canPlan && (
             <Select value="" onValueChange={(v) => dispatch({ type: 'updateTask', taskId: t.id, patch: { dependsOn: [...(t.dependsOn ?? []), v] } })}>
-              <SelectTrigger id="c-add-dep" className="h-8 text-[12px]"><SelectValue placeholder="+ افزودن پیش‌نیاز از همین پروژه" /></SelectTrigger>
+              <SelectTrigger id="c-add-dep" className="h-8 text-[12px]"><SelectValue placeholder="+ Add pre-requisites of the same project" /></SelectTrigger>
               <SelectContent className="max-h-72">{depOptions.map((x) => <SelectItem key={x.id} value={x.id}>{x.docNumber ? `${x.docNumber} — ` : ''}{x.name}</SelectItem>)}</SelectContent>
             </Select>
           )}
         </div>
-        {openDeps.length > 0 && <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-destructive"><AlertTriangle className="h-3.5 w-3.5" /> {n(openDeps.length)} پیش‌نیاز هنوز تمام نشده است.</p>}
+        {openDeps.length > 0 && <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-destructive"><AlertTriangle className="h-3.5 w-3.5" /> {n(openDeps.length)} The prerequisite is not finished yet.</p>}
       </div>
     </Section>
   )
@@ -613,7 +614,7 @@ function AllocationSummary({ t }: { t: Task }) {
   const { n } = useFmt()
   const total = state.allocations.filter((a) => a.taskId === t.id).reduce((s, a) => s + a.hours, 0)
   if (!total) return null
-  return <div className="pt-3 text-[12px] text-muted-foreground">مجموع {L('allocation')} ذخیره‌شده: <span className="num font-medium text-foreground">{n(total, 1)}</span> نفر-ساعت</div>
+  return <div className="pt-3 text-[12px] text-muted-foreground">Total {L('allocation')} Stored: <span className="num font-medium text-foreground">{n(total, 1)}</span> Person-hours</div>
 }
 
 // ---------------- C. Schedule (supervision / team / finance & admin) ----------------
@@ -627,12 +628,12 @@ function FlowPlanningSection({ t }: { t: Task }) {
   const [due, setDue] = useState(t.due)
   const dirty = (withEst && (t.estimation ?? '') !== (est ? Number(est) : '')) || start !== t.start || due !== t.due
   const save = () => {
-    if (start && due && due < start) { toast.error('Due Date قبل از Start است.'); return }
+    if (start && due && due < start) { toast.error("Due date is before the start."); return }
     dispatch({ type: 'updateTask', taskId: t.id, patch: withEst ? { estimation: Number(est) || undefined, start, due } : { start, due } })
-    toast.success('برنامه‌ی تسک ذخیره شد')
+    toast.success("Task Program Saved")
   }
   return (
-    <Section id="c" aside={!manage ? <LockNote text="فقط خواندنی" /> : undefined}>
+    <Section id="c" aside={!manage ? <LockNote text="Read Only" /> : undefined}>
       <div className={cn('grid grid-cols-1 gap-3', withEst ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
         {withEst && (
           <div>
@@ -643,28 +644,28 @@ function FlowPlanningSection({ t }: { t: Task }) {
         <div><Label htmlFor="fc-start" className="eyebrow">{L('start')}</Label><div className="mt-1"><JalaliDateField id="fc-start" value={start} onChange={setStart} disabled={!manage} /></div></div>
         <div><Label htmlFor="fc-due" className="eyebrow">{L('due')}</Label><div className="mt-1"><JalaliDateField id="fc-due" value={due} onChange={setDue} disabled={!manage} /></div></div>
       </div>
-      {t.baselineDue && <p className="mt-2 text-[11.5px] text-muted-foreground">{L('baselineDue')}: <span className="num">{d(t.baselineDue)}</span>{t.due && t.baselineDue !== t.due && <span className="text-destructive"> — تغییر کرده</span>}</p>}
-      <p className="mt-1 text-[11.5px] text-muted-foreground">{isFinTask(t) ? 'Taskهای فضای مالی و فضای اداری در Workload، Work Log، امتیازدهی و گزارش‌های پروژه حساب نمی‌شوند.' : t.kind === 'internal' ? 'تسک تیم در Workload پروژه‌ها Allocation نمی‌گیرد؛ زمان صرف‌شده با Work Log (بخش D) ثبت می‌شود.' : 'زمان واقعی صرف‌شده با Work Log (بخش D) ثبت می‌شود.'}</p>
-      {manage && dirty && <div className="mt-3 flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => { setEst(t.estimation ? String(t.estimation) : ''); setStart(t.start); setDue(t.due) }}>بازگردانی</Button><Button size="sm" onClick={save}>ذخیره</Button></div>}
+      {t.baselineDue && <p className="mt-2 text-[11.5px] text-muted-foreground">{L('baselineDue')}: <span className="num">{d(t.baselineDue)}</span>{t.due && t.baselineDue !== t.due && <span className="text-destructive"> — has changed</span>}</p>}
+      <p className="mt-1 text-[11.5px] text-muted-foreground">{isFinTask(t) ? "Tasks for financial space and office space are not included in the workload, work log, rating and project reports." : t.kind === 'internal' ? "Task Team does not take place on Workload projects; the time spent with Work Log (section D) is recorded." : "The actual time spent with Work Log (section D) is recorded."}</p>
+      {manage && dirty && <div className="mt-3 flex justify-end gap-2"><Button variant="ghost" size="sm" onClick={() => { setEst(t.estimation ? String(t.estimation) : ''); setStart(t.start); setDue(t.due) }}>Back!</Button><Button size="sm" onClick={save}>Save</Button></div>}
     </Section>
   )
 }
 
 // ---------------- D. Status, flow and actual dates ----------------
 const STEPS: { key: FlowState[]; label: string }[] = [
-  { key: ['open'], label: 'ثبت' }, { key: ['assigned'], label: 'ارجاع' }, { key: ['in_progress', 'rework'], label: 'اجرا' }, { key: ['in_review'], label: 'بررسی' }, { key: ['closed'], label: 'بسته' },
+  { key: ['open'], label: 'Submit' }, { key: ['assigned'], label: "References" }, { key: ['in_progress', 'rework'], label: "Run" }, { key: ['in_review'], label: "Checkout" }, { key: ['closed'], label: 'Package' },
 ]
 function FlowStepper({ f,task }: { f: FlowState;task:Task }) {
   const {state}=useStore()
   const steps=task.kind==='supervision'?supervisionStatuses(state).map(x=>({key:[x.phase],label:x.name,id:x.id})):STEPS.map(x=>({...x,id:x.label}))
   const at = task.kind==='supervision'?steps.findIndex(x=>x.id===supervisionStatus(state,task).id):steps.findIndex(s=>s.key.includes(f))
   return (
-    <ol className="flex flex-wrap items-center gap-1" aria-label="مراحل گردش‌کار">
+    <ol className="flex flex-wrap items-center gap-1" aria-label="Workflow Stages">
       {steps.map((s, i) => (
         <li key={s.label} className="flex min-w-0 flex-1 items-center gap-1" aria-current={i === at ? 'step' : undefined}>
           <span className={cn('flex h-6 min-w-0 flex-1 items-center justify-center rounded-full px-1.5 text-[11px] font-medium',
-            i < at ? 'bg-leaf-soft text-leaf-ink' : i === at ? (f === 'rework' ? 'bg-destructive text-white' : f === 'closed' ? 'bg-leaf text-white' : 'bg-azure text-white') : 'bg-secondary text-muted-foreground')}>
-            <span className="truncate">{task.kind!=='supervision' && i === at && f === 'rework' ? 'اصلاح' : s.label}</span>
+            i < at ? 'bg-leaf-soft text-leaf-ink' : i === at ? (f === 'rework' ? 'bg-destructive text-destructive-foreground' : f === 'closed' ? 'bg-leaf text-leaf-foreground' : 'bg-azure text-azure-foreground') : 'bg-secondary text-muted-foreground')}>
+            <span className="truncate">{task.kind!=='supervision' && i === at && f === 'rework' ? "Modifications" : s.label}</span>
           </span>
         </li>
       ))}
@@ -679,34 +680,34 @@ function ActualDates({ t }: { t: Task }) {
   const [a, setA] = useState({ s: t.actualStart, f: t.actualFinish, reason: '' })
   const late = t.actualFinish && t.due && t.actualFinish > t.due
   const save = () => {
-    if (!a.reason.trim()) { toast.error('دلیل اصلاح را بنویسید.'); return }
-    if (a.s && a.f && a.f < a.s) { toast.error('Actual Finish قبل از Actual Start است.'); return }
+    if (!a.reason.trim()) { toast.error("Write down the reason for the correction."); return }
+    if (a.s && a.f && a.f < a.s) { toast.error("The actual final result is before the actual start."); return }
     dispatch({ type: 'setActual', taskId: t.id, actualStart: a.s, actualFinish: a.f, reason: a.reason.trim() })
     setEdit(false)
-    toast.success('تاریخ واقعی اصلاح شد', { description: 'با دلیل در تاریخچه ثبت شد.' })
+    toast.success("The real history has been corrected", { description: "It was recorded for a reason in history." })
   }
   const daysLate = t.actualFinish && t.due ? Math.round((new Date(t.actualFinish).getTime() - new Date(t.due).getTime()) / 86400000) : 0
   return (
     <div className="mt-4 rounded-xl border bg-background/45 p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="eyebrow">زمان واقعی</span>
-        {can.perm('actual.edit') && !edit && <Button size="sm" variant="ghost" className="h-7" onClick={() => { setA({ s: t.actualStart, f: t.actualFinish, reason: '' }); setEdit(true) }}><Pencil className="h-3.5 w-3.5" /> اصلاح</Button>}
+        <span className="eyebrow">Real Time</span>
+        {can.perm('actual.edit') && !edit && <Button size="sm" variant="ghost" className="h-7" onClick={() => { setA({ s: t.actualStart, f: t.actualFinish, reason: '' }); setEdit(true) }}><Pencil className="h-3.5 w-3.5" /> Modifications</Button>}
       </div>
       {!edit ? (
         <dl className="mt-1.5 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3">
           <div><dt className="eyebrow">Actual Start</dt><dd className="num font-medium">{d(t.actualStart)}</dd></div>
           <div><dt className="eyebrow">Actual Finish</dt><dd className={cn('num font-medium', late && 'text-destructive')}>{d(t.actualFinish)}</dd></div>
-          <div className="col-span-2 sm:col-span-1"><dt className="eyebrow">نسبت به Due</dt><dd className="text-[12.5px]">{!t.actualFinish ? (t.due && t.due < TODAY ? <span className="font-semibold text-destructive">گذشته از موعد</span> : <span className="text-muted-foreground">باز</span>) : daysLate > 0 ? <span className="num text-destructive">{n(daysLate)} روز دیرتر</span> : daysLate < 0 ? <span className="num text-leaf-ink">{n(-daysLate)} روز زودتر</span> : 'سر موعد'}</dd></div>
+          <div className="col-span-2 sm:col-span-1"><dt className="eyebrow">relative to due</dt><dd className="text-[12.5px]">{!t.actualFinish ? (t.due && t.due < TODAY ? <span className="font-semibold text-destructive">Overdue</span> : <span className="text-muted-foreground">Open</span>) : daysLate > 0 ? <span className="num text-destructive">{n(daysLate)} Later day</span> : daysLate < 0 ? <span className="num text-leaf-ink">{n(-daysLate)} Early day</span> : "Premature"}</dd></div>
         </dl>
       ) : (
         <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div><Label htmlFor="act-s" className="eyebrow">Actual Start</Label><div className="mt-1"><JalaliDateField id="act-s" value={a.s} onChange={(v) => setA({ ...a, s: v })} /></div></div>
           <div><Label htmlFor="act-f" className="eyebrow">Actual Finish</Label><div className="mt-1"><JalaliDateField id="act-f" value={a.f} onChange={(v) => setA({ ...a, f: v })} /></div></div>
-          <div className="sm:col-span-2"><Label htmlFor="act-r" className="eyebrow">دلیل اصلاح (الزامی)</Label><Input id="act-r" className="mt-1 h-9" value={a.reason} onChange={(e) => setA({ ...a, reason: e.target.value })} placeholder="مثلاً: کار پیش از ثبت در سامانه شروع شده بود" /></div>
-          <div className="flex gap-2 sm:col-span-2"><Button size="sm" onClick={save}>ثبت اصلاح</Button><Button size="sm" variant="ghost" onClick={() => setEdit(false)}>انصراف</Button></div>
+          <div className="sm:col-span-2"><Label htmlFor="act-r" className="eyebrow">Reason for correction (required)</Label><Input id="act-r" className="mt-1 h-9" value={a.reason} onChange={(e) => setA({ ...a, reason: e.target.value })} placeholder="For example: Work started before registration in the system" /></div>
+          <div className="flex gap-2 sm:col-span-2"><Button size="sm" onClick={save}>Refinement Registration</Button><Button size="sm" variant="ghost" onClick={() => setEdit(false)}>Cancel</Button></div>
         </div>
       )}
-      <p className="mt-2 text-[11px] text-muted-foreground">خودکار: Start با اولین شروع کار، Finish با بسته شدن یا تأیید Reviewer. اصلاح دستی فقط کنترل پروژه و مدیرعامل، با دلیل.</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Auto: Start with the first start, Finish with closing or approval by reviewer. Manual modification only control the project and the CEO, with reason.</p>
     </div>
   )
 }
@@ -723,29 +724,29 @@ function SectionD({ t }: { t: Task }) {
     const queued = state.writeQueue.find((w) => w.taskId === t.id)
     const options = t.reviewerId ? statuses.filter((x) => x.category !== 'done' || x.id === s?.id) : statuses
     return (
-      <Section id="d" aside={!can.editStatus(t) ? <LockNote text="فقط مسئول، تیم مسئول یا برنامه‌ریز" /> : t.flow === 'in_review' ? <LockNote text="در انتظار تصمیم Reviewer" /> : undefined}>
+      <Section id="d" aside={!can.editStatus(t) ? <LockNote text="Only responsible, team responsible or planner" /> : t.flow === 'in_review' ? <LockNote text="Waiting for the reviewer’s decision" /> : undefined}>
         <div className="flex items-center gap-3">
           <ProgressRing task={t} value={s?.progress ?? 0} size={44} stroke={4} />
           <div className="flex-1">
             <Label htmlFor="drawer-status" className="sr-only">{L('status')}</Label>
-            <Select value={s?.id} onValueChange={(v) => { dispatch({ type: 'setStatus', taskId: t.id, statusId: v }); toast.success('Status تغییر کرد', { description: t.source === 'mdr' ? `Write-back به MDR با تأخیر ${n(WRITEBACK_DELAY_SEC / 60)} دقیقه انجام می‌شود.` : undefined }) }} disabled={!editStatus}>
+            <Select value={s?.id} onValueChange={(v) => { dispatch({ type: 'setStatus', taskId: t.id, statusId: v }); toast.success("Status has changed", { description: t.source === 'mdr' ? `Writing-back to MDR is done with a delay of ${n(WRITEBACK_DELAY_SEC / 60)} minutes.` : undefined }) }} disabled={!editStatus}>
               <SelectTrigger id="drawer-status" className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>{options.map((x) => <SelectItem key={x.id} value={x.id}>{x.name} ({pct(x.progress)})</SelectItem>)}</SelectContent>
             </Select>
             <div className="mt-1.5 text-[11.5px] text-muted-foreground">
-              Status Set: {scope === 'office' ? 'پیش‌فرض دفتر' : state.tasks[scope] ? `Override در «${state.tasks[scope].name}»` : 'سطح پروژه'}، {L('progress')} از Status می‌آید
-              {t.reviewerId && <> — Status نهایی فقط با تأیید Reviewer (بخش E)</>}
+              Status Set: {scope === 'office' ? "Default Office" : state.tasks[scope] ? `Override in " ${state.tasks[scope].name} "` : "Project Level"}, {L('progress')} comes from the task status
+              {t.reviewerId && <> — Final Status only with Reviewer confirmation (Section E)</>}
             </div>
           </div>
         </div>
         {hasField(t, 'weight') && (
           <dl className="mt-3 rounded-xl border bg-background/45 px-3 py-2">
-            <Field label={`${L('weight')} در Roll-up والد (MDR)`}>
-              <span className="num">{t.weight != null ? n(t.weight, 2) : '—'}</span>{t.weightDerived && <span className="ms-1 text-[11px] text-azure">تقسیم مساوی (در MDR خالی بود)</span>}
+            <Field label={`${L('weight')} Roll-up Parent (MDR)`}>
+              <span className="num">{t.weight != null ? n(t.weight, 2) : '—'}</span>{t.weightDerived && <span className="ms-1 text-[11px] text-azure">equal division (was empty in MDR)</span>}
             </Field>
           </dl>
         )}
-        {queued && <div className="mt-3 flex items-center gap-2 rounded-md bg-azure-soft px-3 py-2 text-[12px] text-azure-ink"><CornerDownLeft className="h-3.5 w-3.5" /> در صف Write-back: Last Status «{queued.statusName}» و Progress {pct(queued.progress)}</div>}
+        {queued && <div className="mt-3 flex items-center gap-2 rounded-md bg-azure-soft px-3 py-2 text-[12px] text-azure-ink"><CornerDownLeft className="h-3.5 w-3.5" /> Writing-back: Last Status{queued.statusName}» and Progress {pct(queued.progress)}</div>}
         <ActualDates t={t} />
         <WorkLogPanel t={t} />
         <PointArea t={t} />
@@ -761,18 +762,18 @@ function SectionD({ t }: { t: Task }) {
     <Section id="d">
       <FlowStepper f={f} task={t} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {executor && (f === 'assigned' || f === 'rework') && <Button onClick={() => { dispatch({ type: 'flow', taskId: t.id, op: 'start' }); toast.success(f === 'rework' ? 'اصلاح شروع شد' : 'کار شروع شد', { description: t.actualStart ? undefined : 'Actual Start ثبت شد.' }) }}><Play className="h-4 w-4" /> {f === 'rework' ? 'شروع اصلاح' : 'شروع کار'}</Button>}
-        {executor && (f === 'in_progress' || f === 'rework') && (t.reviewerId || t.kind === 'supervision') && <Button variant="outline" onClick={() => jump('e')}><ArrowDown className="h-4 w-4" /> ارسال برای بررسی</Button>}
-        {(executor || manage) && selfClose && (f === 'in_progress' || f === 'rework') && <Button onClick={() => { dispatch({ type: 'flow', taskId: t.id, op: 'complete' }); toast.success('کار بسته شد', { description: 'Actual Finish ثبت شد.' }) }}><CheckCircle2 className="h-4 w-4" /> بستن کار</Button>}
-        {f === 'in_review' && decide && <Button variant="outline" onClick={() => jump('e')}><ArrowDown className="h-4 w-4" /> تصمیم درباره‌ی بررسی</Button>}
-        {f === 'open' && manage && <span className="text-[12px] text-muted-foreground">برای شروع گردش‌کار، در بخش B مسئول را انتخاب و «ارجاع» بزنید.</span>}
-        {f === 'assigned' && !executor && <span className="text-[12px] text-muted-foreground">منتظر شروع کار توسط مسئول.</span>}
-        {f === 'in_review' && !decide && <span className="text-[12px] text-muted-foreground">منتظر تصمیم Reviewer.</span>}
+        {executor && (f === 'assigned' || f === 'rework') && <Button onClick={() => { dispatch({ type: 'flow', taskId: t.id, op: 'start' }); toast.success(f === 'rework' ? "Modification has begun" : "Work started", { description: t.actualStart ? undefined : "It was actually started." }) }}><Play className="h-4 w-4" /> {f === 'rework' ? "Start Revisions" : 'Start Work'}</Button>}
+        {executor && (f === 'in_progress' || f === 'rework') && (t.reviewerId || t.kind === 'supervision') && <Button variant="outline" onClick={() => jump('e')}><ArrowDown className="h-4 w-4" /> Submit for Review</Button>}
+        {(executor || manage) && selfClose && (f === 'in_progress' || f === 'rework') && <Button onClick={() => { dispatch({ type: 'flow', taskId: t.id, op: 'complete' }); toast.success("It's closed", { description: "The actual final was recorded." }) }}><CheckCircle2 className="h-4 w-4" /> Close Task</Button>}
+        {f === 'in_review' && decide && <Button variant="outline" onClick={() => jump('e')}><ArrowDown className="h-4 w-4" /> Decision on the review</Button>}
+        {f === 'open' && manage && <span className="text-[12px] text-muted-foreground">To start the workflow, select and “reference” in the responsible section B.</span>}
+        {f === 'assigned' && !executor && <span className="text-[12px] text-muted-foreground">Waiting for the start of work by the officer.</span>}
+        {f === 'in_review' && !decide && <span className="text-[12px] text-muted-foreground">Waiting for the reviewer’s decision.</span>}
       </div>
       {f === 'closed' && (decide || manage) && (
-        <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!reason.trim()) { toast.error('دلیل بازگشایی را بنویسید.'); return } dispatch({ type: 'flow', taskId: t.id, op: 'reopen', note: reason.trim() }); setReason(''); toast('تسک دوباره باز شد', { description: 'Actual Finish پاک شد و مسئول اعلان گرفت.' }) }}>
-          <Input id="d-reopen" className="h-9" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="دلیل بازگشایی" />
-          <Button type="submit" variant="outline" className="h-9"><RotateCcw className="h-4 w-4" /> بازگشایی</Button>
+        <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!reason.trim()) { toast.error("Write down the reason for reopening."); return } dispatch({ type: 'flow', taskId: t.id, op: 'reopen', note: reason.trim() }); setReason(''); toast("Task opened again", { description: "The actual final was cleared and the officer was notified." }) }}>
+          <Input id="d-reopen" className="h-9" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for reopening" />
+          <Button type="submit" variant="outline" className="h-9"><RotateCcw className="h-4 w-4" /> Reopen</Button>
         </form>
       )}
       <FlowProgress t={t} />
@@ -792,7 +793,7 @@ function FlowProgress({ t }: { t: Task }) {
   const manual = isFinTask(t)
   const canEdit = manual && f !== 'closed' && f !== 'in_review' && (t.assigneeUserId === me.id || can.manageFlow(t))
   const [v, setV] = useState(t.progressPct ?? 0)
-  const save = () => { dispatch({ type: 'updateTask', taskId: t.id, patch: { progressPct: v } }); toast.success(`پیشرفت: ${pct(v)}`, { description: 'در تاریخچه‌ی Task ثبت شد.' }) }
+  const save = () => { dispatch({ type: 'updateTask', taskId: t.id, patch: { progressPct: v } }); toast.success(`Progress: ${pct(v)}`, { description: "It was recorded in the history of Task." }) }
   return (
     <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-background/45 p-3">
       <ProgressRing task={t} value={canEdit ? v : value} size={40} stroke={4} />
@@ -801,13 +802,13 @@ function FlowProgress({ t }: { t: Task }) {
         {canEdit ? (
           <div className="mt-1 flex items-center gap-2">
             <input id="d-progress" type="range" min={0} max={100} step={5} value={v} onChange={(e) => setV(Number(e.target.value))} className="h-2 min-w-0 flex-1 accent-[hsl(var(--azure))]" aria-valuetext={pct(v)} />
-            <span className="num w-10 shrink-0 text-end text-[12.5px] font-semibold">{n(v)}٪</span>
-            {v !== (t.progressPct ?? 0) && <Button size="sm" className="h-8" onClick={save}>ثبت پیشرفت</Button>}
+            <span className="num w-10 shrink-0 text-end text-[12.5px] font-semibold">{n(v)}%</span>
+            {v !== (t.progressPct ?? 0) && <Button size="sm" className="h-8" onClick={save}>Record progress</Button>}
           </div>
         ) : (
           <div className="num mt-0.5 text-[13px] font-semibold">{pct(value)}</div>
         )}
-        <p className="mt-1 text-[11px] text-muted-foreground">{manual ? (f === 'closed' ? 'Task بسته شده است.' : f === 'in_review' ? 'تا تصمیم Reviewer ثابت می‌ماند.' : 'درصد پیشرفت را مسئول Task (یا مدیرعامل و سازنده‌ی آن) ثبت می‌کند؛ با بسته شدن ۱۰۰٪ می‌شود.') : 'از مرحله‌ی گردش‌کار می‌آید.'}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">{manual ? (f === 'closed' ? "Task is closed." : f === 'in_review' ? "The reviewer’s decision remains the same." : "The percentage of progress is responsible for the task (or its manager and manufacturer); it is 100% closed.") : "It comes from the work cycle."}</p>
       </div>
     </div>
   )
@@ -840,20 +841,20 @@ function SectionE({ t }: { t: Task }) {
   const involved = [t.assigneeUserId, t.reporterId, t.reviewerId, ...(t.participantIds ?? [])].includes(me.id)
   const canAttach = involved || can.planTask(t) || can.editStatus(t) || can.manageFlow(t)
   const submit = () => {
-    if (!note.trim()) { toast.error('شرح کار انجام‌شده را بنویسید.'); return }
+    if (!note.trim()) { toast.error("Write the description of the work done."); return }
     dispatch({ type: 'flow', taskId: t.id, op: 'submit', note: note.trim(), files: rfiles })
     setNote(''); setRfiles([])
-    toast.success('برای بررسی ارسال شد', { description: 'Reviewer اعلان گرفت.' })
+    toast.success("Sent for review", { description: "The reviewer announced." })
   }
   const decideNow = (op: 'approve' | 'rework') => {
-    if (op === 'rework' && !decision.trim()) { toast.error('دلیل بازگشت برای اصلاح را بنویسید.'); return }
+    if (op === 'rework' && !decision.trim()) { toast.error("Write down the reason for the return."); return }
     dispatch({ type: 'flow', taskId: t.id, op, note: decision.trim() || undefined })
     setDecision('')
-    toast.success(op === 'approve' ? 'تأیید شد و تسک بسته شد' : 'برای اصلاح برگشت', { description: op === 'approve' ? 'Actual Finish ثبت شد.' : 'مجری اعلان گرفت.' })
+    toast.success(op === 'approve' ? "It's confirmed and it's closed" : "Back to reform", { description: op === 'approve' ? "The actual final was recorded." : "The presenter declared." })
   }
   return (
     <Section id="e">
-      {work && !t.reviewerId && <p className="mb-3 text-[12px] text-muted-foreground">این تسک Reviewer ندارد و با رسیدن به Status نهایی بسته می‌شود. برای مرحله‌ی بررسی، در بخش B یک Reviewer تعیین کنید.</p>}
+      {work && !t.reviewerId && <p className="mb-3 text-[12px] text-muted-foreground">This task does not have a reviewer and closes with the final status. For the review phase, set a reviewer in section B.</p>}
       {rounds.length > 0 && (
         <ol className="mb-4 flex flex-col gap-3 border-s ps-4">
           {rounds.map((r) => {
@@ -861,15 +862,15 @@ function SectionE({ t }: { t: Task }) {
             return (
               <li key={r.id} className="relative">
                 <span className={cn('absolute -start-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background', r.decision === 'approve' ? 'bg-leaf' : r.decision === 'rework' ? 'bg-destructive' : 'bg-azure')} />
-                <div className="text-[12px] text-muted-foreground"><b className="text-foreground">دور {n(r.round)}</b> — {userById[r.submittedBy]?.name}، {time(r.submittedAt)}، {clock(r.submittedAt)}</div>
+                <div className="text-[12px] text-muted-foreground"><b className="text-foreground">Round {n(r.round)}</b> — {userById[r.submittedBy]?.name}, {time(r.submittedAt)}, {clock(r.submittedAt)}</div>
                 <div className="mt-0.5 whitespace-pre-wrap text-[13px] leading-6">{r.note}</div>
                 {rf.length > 0 && <div className="mt-2"><AttachmentList items={rf} /></div>}
                 {r.decision ? (
                   <div className={cn('mt-2 rounded-lg px-3 py-2 text-[12.5px]', r.decision === 'approve' ? 'bg-leaf-soft text-leaf-ink' : 'bg-danger-soft text-destructive')}>
-                    <b>{r.decision === 'approve' ? 'تأیید' : 'بازگشت برای اصلاح'}</b> — {userById[r.decidedBy ?? '']?.name}، {time(r.decidedAt ?? '')}
+                    <b>{r.decision === 'approve' ? 'Approve' : 'Rework'}</b> — {userById[r.decidedBy ?? '']?.name}, {time(r.decidedAt ?? '')}
                     {r.decisionNote && <div className="mt-0.5 text-foreground">{r.decisionNote}</div>}
                   </div>
-                ) : <div className="mt-2 inline-flex rounded-full bg-azure px-2 py-0.5 text-[11.5px] text-white">در انتظار تصمیم {userById[t.reviewerId ?? '']?.name ?? 'Reviewer'}</div>}
+                ) : <div className="mt-2 inline-flex rounded-full bg-azure px-2 py-0.5 text-[11.5px] text-azure-foreground">Waiting for decision {userById[t.reviewerId ?? '']?.name ?? 'Reviewer'}</div>}
               </li>
             )
           })}
@@ -877,29 +878,29 @@ function SectionE({ t }: { t: Task }) {
       )}
       {canDecide && (
         <div className="mb-4 rounded-xl border border-azure/40 bg-azure-soft/40 p-3">
-          <Label htmlFor="e-decision" className="eyebrow">تصمیم Reviewer</Label>
-          <Textarea id="e-decision" className="mt-1 min-h-[60px]" value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="برای بازگشت، دلیل و موارد اصلاح را بنویسید؛ برای تأیید اختیاری است" />
+          <Label htmlFor="e-decision" className="eyebrow">Reviewer's decision</Label>
+          <Textarea id="e-decision" className="mt-1 min-h-[60px]" value={decision} onChange={(e) => setDecision(e.target.value)} placeholder="For return, write the reason and correction; for confirmation is optional;" />
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button onClick={() => decideNow('approve')}><CheckCircle2 className="h-4 w-4" /> تأیید و بستن</Button>
-            <Button variant="outline" onClick={() => decideNow('rework')}><Undo2 className="h-4 w-4" /> بازگشت برای اصلاح</Button>
+            <Button onClick={() => decideNow('approve')}><CheckCircle2 className="h-4 w-4" /> Confirm and close</Button>
+            <Button variant="outline" onClick={() => decideNow('rework')}><Undo2 className="h-4 w-4" /> Rework</Button>
           </div>
         </div>
       )}
       {canSubmit && (
         <div className="mb-4 rounded-xl border bg-background/45 p-3">
-          <Label htmlFor="e-note" className="eyebrow">ارسال برای بررسی{rounds.length ? ` (دور ${n(rounds.length + 1)})` : ''}</Label>
-          <Textarea id="e-note" className="mt-1 min-h-[64px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder="چه کاری انجام شد؟ اگر دور قبل برگشت خورده، اصلاحات را بنویسید." />
+          <Label htmlFor="e-note" className="eyebrow">Submit for Review{rounds.length ? ` (Around ${n(rounds.length + 1)})` : ''}</Label>
+          <Textarea id="e-note" className="mt-1 min-h-[64px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder="If you have returned, write down the corrections." />
           <div className="mt-2"><FilePicker id="e-files" files={rfiles} onChange={setRfiles} /></div>
-          <div className="mt-2"><Button onClick={submit}><Send className="h-4 w-4" /> ارسال برای بررسی</Button></div>
-          {t.kind === 'internal' && !t.reviewerId && <p className="mt-1.5 text-[11.5px] text-muted-foreground">Reviewer تعیین نشده؛ سرپرست تیم بررسی می‌کند. برای بستن بدون بررسی، «بستن کار» در بخش D.</p>}
+          <div className="mt-2"><Button onClick={submit}><Send className="h-4 w-4" /> Submit for Review</Button></div>
+          {t.kind === 'internal' && !t.reviewerId && <p className="mt-1.5 text-[11.5px] text-muted-foreground">Undefined reviewer; the team supervisor checks. To close without checking, “Close Work” in section D.</p>}
         </div>
       )}
-      <div className="eyebrow mb-2">پیوست‌های تسک ({n(loose.length)})</div>
-      <AttachmentList items={loose} empty="پیوستی نیست." />
+      <div className="eyebrow mb-2">Task Attachments ({n(loose.length)})</div>
+      <AttachmentList items={loose} empty="No attachments." />
       {canAttach && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <FilePicker id="e-extra" files={extra} onChange={setExtra} label="انتخاب فایل" />
-          {extra.length > 0 && <Button size="sm" className="h-8" onClick={() => { dispatch({ type: 'addAttachments', taskId: t.id, files: extra }); setExtra([]); toast.success('پیوست اضافه شد') }}>افزودن {n(extra.length)} پیوست</Button>}
+          <FilePicker id="e-extra" files={extra} onChange={setExtra} label="Choose a File" />
+          {extra.length > 0 && <Button size="sm" className="h-8" onClick={() => { dispatch({ type: 'addAttachments', taskId: t.id, files: extra }); setExtra([]); toast.success("Attachment added") }}>Add {n(extra.length)} Attachment</Button>}
         </div>
       )}
     </Section>
@@ -917,11 +918,11 @@ function CommentsSection({ t }: { t: Task }) {
     dispatch({ type: 'addComment', taskId: t.id, text: text.trim() })
     const tagged = (text.match(/@[a-z0-9._-]+/gi) ?? []).length
     setText('')
-    toast.success('کامنت ثبت شد', { description: tagged ? 'اعضای تگ‌شده اعلان می‌گیرند.' : undefined })
+    toast.success("Comments are registered", { description: tagged ? "Members of the tag will be notified." : undefined })
   }
   return (
     <div>
-      <h4 className="mb-3 flex items-center gap-1.5 text-[12.5px] font-semibold"><MessageSquare className="h-4 w-4" /> کامنت‌ها</h4>
+      <h4 className="mb-3 flex items-center gap-1.5 text-[12.5px] font-semibold"><MessageSquare className="h-4 w-4" /> Category: Comments</h4>
       {list.length > 0 && (
         <ul className="mb-3 flex flex-col gap-3">
           {list.map((c) => {
@@ -930,7 +931,7 @@ function CommentsSection({ t }: { t: Task }) {
               <li key={c.id} className={cn('flex gap-2.5 rounded-lg p-1.5', c.mentions.includes(me.id) && 'bg-azure-soft/40')}>
                 <Initials user={u} size={28} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2 text-[12px]"><span className="font-semibold">{u?.name}</span><bdi className="mono text-[11px] text-muted-foreground">@{u?.username}</bdi><span className="num text-[11px] text-muted-foreground">{time(c.at)}، {clock(c.at)}</span></div>
+                  <div className="flex flex-wrap items-baseline gap-x-2 text-[12px]"><span className="font-semibold">{u?.name}</span><bdi className="mono text-[11px] text-muted-foreground">@{u?.username}</bdi><span className="num text-[11px] text-muted-foreground">{time(c.at)}, {clock(c.at)}</span></div>
                   <div className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-6"><RichText text={c.text} /></div>
                 </div>
               </li>
@@ -938,7 +939,7 @@ function CommentsSection({ t }: { t: Task }) {
           })}
         </ul>
       )}
-      <MentionInput id={`comment-${t.id}`} value={text} onChange={setText} onSubmit={send} placeholder="کامنت بنویسید؛ برای اعلان به همکار، @ID او را بنویسید" submitLabel="ثبت" />
+      <MentionInput id={`comment-${t.id}`} value={text} onChange={setText} onSubmit={send} placeholder="Write a comment; to announce to the colleague, write her @ID" submitLabel="Submit" />
     </div>
   )
 }
@@ -951,14 +952,14 @@ function AuditSection({ t }: { t: Task }) {
   useEffect(() => { const h = setInterval(() => force((x) => x + 1), 30000); return () => clearInterval(h) }, [])
   return (
     <div className="mt-5">
-      <h4 className="mb-3 flex items-center gap-1.5 text-[12.5px] font-semibold"><History className="h-4 w-4" /> تاریخچه (AuditLog)</h4>
-      {entries.length === 0 ? <p className="text-[12px] text-muted-foreground">هنوز تغییری ثبت نشده است.</p> : (
+      <h4 className="mb-3 flex items-center gap-1.5 text-[12.5px] font-semibold"><History className="h-4 w-4" /> History (AuditLog)</h4>
+      {entries.length === 0 ? <p className="text-[12px] text-muted-foreground">No change has been recorded yet.</p> : (
         <ol className="flex flex-col gap-2.5 border-s ps-4">
           {entries.map((e) => (
             <li key={e.id} className="relative text-[12.5px]">
               <span className={cn('absolute -start-[21px] top-1.5 h-2 w-2 rounded-full border-2 border-background', e.kind === 'security' ? 'bg-destructive' : e.kind === 'review' ? 'bg-leaf' : 'bg-azure')} />
               <div>{e.text}</div>
-              <div className="text-[11px] text-muted-foreground">{userById[e.userId]?.name ?? 'سامانه'}، {fmt.time(e.at)}</div>
+              <div className="text-[11px] text-muted-foreground">{userById[e.userId]?.name ?? "System"}, {fmt.time(e.at)}</div>
             </li>
           ))}
         </ol>

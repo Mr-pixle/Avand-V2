@@ -4,8 +4,8 @@ import { isWorkItem, taskProgress } from './domain'
 
 export const PROJECT_STAGES: readonly ProjectStage[] = ['studies', 'concept', 'phase1_execution', 'municipality', 'coordination', 'interior', 'phase2_preliminary', 'phase2']
 export const STAGE_FA: Record<ProjectStage, string> = {
-  studies: 'مطالعات پروژه', concept: 'طرح مفهومی پروژه', phase1_execution: 'طراحی فاز ۱ اجرایی', municipality: 'شهرداری',
-  coordination: 'هماهنگی با سایر دیسیپلین‌ها', interior: 'طراحی داخلی', phase2_preliminary: 'طراحی فاز ۲ مقدماتی', phase2: 'طراحی فاز ۲',
+  studies: 'Project Studies', concept: 'Concept Design', phase1_execution: 'Phase 1 Execution Design', municipality: 'Municipal Approval',
+  coordination: 'Design Coordination', interior: 'Interior Design', phase2_preliminary: 'Preliminary Phase 2 Design', phase2: 'Phase 2 Design',
 }
 const norm = (s: string) => s.replace(/[ي]/g, 'ی').replace(/ك/g, 'ک').replace(/[‌\s]+/g, ' ').replace(/[1١]/g, '۱').replace(/[2٢]/g, '۲').trim()
 /** Conservative migration/import inference: ambiguous combined headings stay unclassified. */

@@ -9,7 +9,7 @@ export const newWorkspaceId = () => newId()
 export function useWorkspaceSave() {
   const { state, dispatch } = useStore()
   const [busy, setBusy] = useState(false)
-  const save = async (action: Action, message = 'تغییرات ذخیره شد') => {
+  const save = async (action: Action, message = "Changes are saved") => {
     const error = guard(state, action)
     if (error) { toast.error(error); return false }
     setBusy(true)
@@ -17,7 +17,7 @@ export function useWorkspaceSave() {
       if (SERVER_MODE) { await api('/api/action', { action }); await getRemote().load() } else dispatch(action)
       if (message) toast.success(message)
       return true
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'ذخیره انجام نشد؛ دوباره تلاش کنید.'); return false }
+    } catch (e) { toast.error(e instanceof Error ? e.message : "No storage is done; try again."); return false }
     finally { setBusy(false) }
   }
   return { save, busy }

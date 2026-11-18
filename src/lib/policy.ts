@@ -1,3 +1,6 @@
+import { roleGuard, type RoleDefinition } from './accessRoles'
+import { whiteboardGuard } from './whiteboards'
+import { validIcon } from './itemIcons'
 import {projectNodeProblem} from './projectNodes'
 import { OFFICE_ACTIONS, officeGuard } from './office'
 import { WORKSPACE_ACTIONS, workspaceGuard } from './workspace'
@@ -17,12 +20,13 @@ import {
 } from './admin'
 import { boardOf, checkBoard, checkFields, depthOf, descendants, heightOf, MAX_DEPTH, tasksOf } from './personal'
 import { isMdrUrl } from './mdr'
+import { projectDetailProblem } from './projectDetails'
 
 /** System administration belongs to Project Control: the legacy 'sysadmin' role is treated as Control everywhere */
 export const ROLE_ORDER: Role[] = ['ceo', 'management', 'office', 'finance', 'control', 'pm', 'lead', 'member', 'inspector']
 export const ROLE_FA: Record<Role, string> = {
-  sysadmin: 'کنترل پروژه', ceo: 'مدیرعامل', management: 'مدیریت', control: 'کنترل پروژه',
-  pm: 'مدیر پروژه', lead: 'سرپرست تیم', member: 'عضو تیم', inspector: 'ناظر / بازرس', office: 'مدیر اداری', finance: 'مدیر مالی',
+  sysadmin: 'Project Controls', ceo: 'CEO', management: 'Management', control: 'Project Controls',
+  pm: 'Project Manager', lead: 'Team Lead', member: 'Team Member', inspector: 'Site Inspector', office: 'Office Manager', finance: 'Finance Manager',
 }
 
 export type Perm =
@@ -32,11 +36,23 @@ export type Perm =
   | 'control.section' | 'points.manage' | 'worklog.manage' | 'worklog.view.all'
   | 'requests.office' | 'requests.ceo' | 'admin.reports' | 'timesheet.view.all' | 'timesheet.edit.all' | 'timesheet.close' | 'leave.direct'
   | 'fin.finance' | 'fin.office' | 'fin.shared'
+  | 'project.view' | 'project.create' | 'project.edit' | 'staffing.edit'
+  | 'team.create' | 'team.edit' | 'task.view' | 'task.create' | 'task.edit' | 'task.delete'
+  | 'library.view' | 'library.create' | 'library.edit' | 'library.delete'
+  | 'whiteboard.view' | 'whiteboard.create' | 'whiteboard.edit' | 'whiteboard.delete'
+  | 'requests.create' | 'requests.it' | 'roles.manage'
 
 /** Role × permission matrix (section 6 of the technical report). Scoped rules (PM → own projects, lead → own team) are below. */
 // The Project Control section (Workload, Sync, Admin, points report) and everything done there: CEO and Project Control only.
 const CONTROL: Role[] = ['ceo', 'control']
 const MATRIX: Record<Perm, Role[]> = {
+  'roles.manage': ['ceo'],
+  'project.view': ROLE_ORDER, 'project.create': CONTROL, 'project.edit': CONTROL, 'staffing.edit': CONTROL,
+  'team.create': CONTROL, 'team.edit': CONTROL,
+  'task.view': ROLE_ORDER, 'task.create': ROLE_ORDER, 'task.edit': ROLE_ORDER, 'task.delete': ROLE_ORDER,
+  'library.view': ROLE_ORDER, 'library.create': CONTROL, 'library.edit': CONTROL, 'library.delete': CONTROL,
+  'whiteboard.view': ROLE_ORDER, 'whiteboard.create': ROLE_ORDER, 'whiteboard.edit': ROLE_ORDER, 'whiteboard.delete': CONTROL,
+  'requests.create': ROLE_ORDER, 'requests.it': ['control'],
   'control.section': CONTROL,
   'users.manage': CONTROL,
   'users.approve': CONTROL,
@@ -74,26 +90,56 @@ const MATRIX: Record<Perm, Role[]> = {
 
 export const PERMISSION_MATRIX: Readonly<Record<Perm, readonly Role[]>> = MATRIX
 export const PERM_FA: Record<Perm, string> = {
-  'control.section': 'دیدن بخش کنترل پروژه (Workload، Sync، مدیریت، گزارش امتیازات)', 'points.manage': 'گزارش و جزئیات امتیاز و اصلاح تاریخ‌های مؤثر',
-  'users.manage': 'کاربران، نقش‌ها و تنظیمات سیستم', 'users.approve': 'تأیید درخواست عضویت', 'project.define': 'تعریف و ویرایش پروژه',
-  'sync.run': 'Sync و تأیید Sync Review', 'plan.all': 'تخصیص، Estimation و Due (مدیر پروژه: پروژه‌ی خود؛ سرپرست: تیم خود)',
-  'status.all': 'تغییر Status همه‌ی تسک‌ها (اعضا: تسک خود و تیم)', 'statuses.manage': 'مدیریت Status Setها', 'calendar.manage': 'تعطیلات رسمی',
-  'announce.post': 'ارسال اطلاعیه', 'supervision.create': 'ثبت، ارجاع و بررسی مورد نظارتی', 'supervision.review.all': 'تصمیم درباره‌ی همه‌ی بررسی‌ها',
-  'teamspace.all': 'فضای همه‌ی تیم‌ها: دیدن، ساخت تسک و ارجاع به اعضای همان تیم (بقیه: تیم خود)', 'actual.edit': 'اصلاح دستی Actual Start/Finish', 'audit.view': 'مشاهده‌ی AuditLog',
-  'workload.view': 'Workload', 'admin.view': 'صفحه‌ی مدیریت',
-  'worklog.manage': 'ویرایش و حذف Work Log دیگران (با دلیل)', 'worklog.view.all': 'دیدن Work Log همه (مدیر پروژه: پروژه‌ی خود؛ سرپرست: تیم خود)',
-  'requests.office': 'بررسی درخواست‌های اداری (مرحله‌ی اول) و لغو مرخصی تأییدشده', 'requests.ceo': 'تصمیم نهایی درخواست‌های اداری',
-  'admin.reports': 'گزارش‌های اداری', 'timesheet.view.all': 'دیدن تایم‌شیت همه', 'timesheet.edit.all': 'اصلاح تایم‌شیت دیگران (با دلیل)',
-  'timesheet.close': 'بستن ماه و قواعد تایم‌شیت', 'leave.direct': 'ثبت مستقیم مرخصی (موارد استثنا، با دلیل)',
-  'fin.shared': 'بخش مشترک اداری-مالی: مشاهده و مدیریت',
-  'fin.finance': 'فضای مالی: دیدن، ساخت و پیگیری Taskها', 'fin.office': 'فضای اداری (مدیریتی): دیدن، ساخت و پیگیری Taskها',
+  'roles.manage': "Management of roles and permissions",
+  'project.view': "View Projects", 'project.create': "Creating a Project", 'project.edit': "Project Editing", 'staffing.edit': "Edit Executive Structure",
+  'team.create': "Create team", 'team.edit': "Edit and archive team",
+  'task.view': "View Tasks", 'task.create': "Create Tasks", 'task.edit': "Edit Task", 'task.delete': "Delete Personal Tasks",
+  'library.view': "Visit the library", 'library.create': "Create document and link", 'library.edit': "Edit Document and Link", 'library.delete': "Remove Document and Link",
+  'whiteboard.view': "View Project Board", 'whiteboard.create': "Create or duplicate the board", 'whiteboard.edit': "Edit Board", 'whiteboard.delete': "Remove Board",
+  'requests.create': "Registration of office application", 'requests.it': "Request for IT",
+  'control.section': "See Project Control (Workload, Sync, Management, Report Points)", 'points.manage': "Report and details of points and correction of effective dates",
+  'users.manage': "Users, roles and system settings", 'users.approve': "Confirmation of membership application", 'project.define': "Defining and editing the project",
+  'sync.run': "Sync and Sync Review Verification", 'plan.all': "Appropriation, Estimation and Due (Project Manager: Your Project; Supervisor: Your Team)",
+  'status.all': "Change Status of all Tasks (Members: Self-Tack and Team)", 'statuses.manage': "Management Status Settings", 'calendar.manage': "Official Holiday",
+  'announce.post': "Send Message", 'supervision.create': "Registration, referral and review of monitoring case", 'supervision.review.all': "Decide on all reviews",
+  'teamspace.all': "The space of all teams: seeing, building and referring to members of the same team (the rest: their own team)", 'actual.edit': "Real Start/Finish Manual Modification", 'audit.view': "View AuditLog",
+  'workload.view': 'Workload', 'admin.view': "Management Page",
+  'worklog.manage': "Edit and remove work log of others (for a reason)", 'worklog.view.all': "See All Work Log (Project Manager: Your Project; Supervisor: Your Team)",
+  'requests.office': "Review of administrative applications (first stage) and cancellation of approved leave", 'requests.ceo': "Final decision of office requests",
+  'admin.reports': "Office Reports", 'timesheet.view.all': "See all time sheets", 'timesheet.edit.all': "Timesheet correction of others (for a reason)",
+  'timesheet.close': "Close the Moon and Time Sheet Rules", 'leave.direct': "Direct registration of leave (exceptions, for a reason)",
+  'fin.shared': "Joint Administrative-Financial Sector: View and Manage",
+  'fin.finance': "Financial Space: Seeing, Building and Tracking Tasks", 'fin.office': "Office Space (Management): Seeing, Building and Tracking Tasks",
 }
 
 type S = Pick<State, 'users' | 'projects' | 'tasks' | 'statusSets' | 'internalProjects'>
 
 /** Effective role: the legacy System Administrator role acts as Project Control */
 export const roleOf = (u: User): Role => (u.role === 'sysadmin' ? 'control' : u.role)
-export const has = (u: User | undefined, p: Perm) => !!u && u.status === 'active' && MATRIX[p].includes(roleOf(u))
+export const has = (u: User | undefined, p: Perm) => !!u && u.status === 'active' && (p === 'roles.manage' ? u.role === 'ceo' : u.role !== 'ceo' && Array.isArray(u.rolePermissions) ? u.rolePermissions.includes(p) : MATRIX[p].includes(roleOf(u)))
+const ACTION_PERMISSIONS: Partial<Record<string, Perm>> = {
+  projectAdd: 'project.create', projectUpdate: 'project.edit',
+  teamAdd: 'team.create', teamUpdate: 'team.edit', teamArchive: 'team.edit', teamMember: 'team.edit',
+  addTask: 'task.create', createFlowTask: 'task.create', ptCreate: 'task.create', ptDelete: 'task.delete',
+  updateTask: 'task.edit', setStatus: 'task.edit', savePlan: 'task.edit', flow: 'task.edit', classifyTasks: 'task.edit',
+  addAttachments: 'task.edit', setActual: 'task.edit', ptUpdate: 'task.edit', ptMove: 'task.edit',
+  reqCreate: 'requests.create',
+}
+
+export const canAssignBuiltIn = (state: State, actor: User, role: Role) => {
+  if (!assignableRoles(actor).includes(role)) return false
+  if (actor.role === 'ceo') return true
+  const override: RoleDefinition | undefined = state.roleDefinitions[role]
+  // Control can assign default accounts; granting an edited role may not expand the actor's authority.
+  return (!override && !actor.customRoleId) || (override?.permissions ?? (Object.keys(MATRIX) as Perm[]).filter(permission => MATRIX[permission].includes(role))).every(permission => has(actor, permission))
+}
+
+export function canAdministerAccount(actor: User, target: User) {
+  if (actor.id === target.id || actor.role === 'ceo') return true
+  if (target.role === 'ceo') return false
+  return (!target.rolePermissions && !actor.customRoleId) || (Object.keys(MATRIX) as Perm[]).every(permission => !has(target, permission) || has(actor, permission))
+}
+
 export const userOf = (state: Pick<State, 'users'>, id: string | null | undefined) => state.users.find((u) => u.id === id && u.status === 'active')
 const projectOf = (state: S, id: string): Project | undefined => state.projects.find((p) => p.id === id)
 export const isPMOf = (state: S, u: User | undefined, projectId: string) => {
@@ -118,7 +164,7 @@ export function assignableRoles(me: User | undefined): Role[] {
 // ---------- scoped checks ----------
 /** Sync is part of the Project Control section: CEO and Project Control only (projectId kept for a future per-project rule) */
 export function canSyncProject(_state: S, u: User | undefined, _projectId: string) { return has(u, 'sync.run') }
-export function canCreateProjectTask(state: S, u: User | undefined, projectId: string) { return has(u, 'plan.all') || isPMOf(state, u, projectId) }
+export function canCreateProjectTask(state: S, u: User | undefined, projectId: string) { return has(u, 'task.create') && (has(u, 'plan.all') || isPMOf(state, u, projectId)) }
 
 export function canViewSupervisionOf(state: S, u: User | undefined, projectId: string) {
   if (!u) return false
@@ -138,7 +184,9 @@ export const canSeeFinSpace = (u: User | undefined, space?: FinSpace) => (space 
 export const finSpacesOf = (u: User | undefined) => FIN_SPACES.filter((s) => canSeeFinSpace(u, s))
 
 export function canViewTask(state: S, u: User | undefined, t: Task) {
+  if (!has(u, 'task.view')) return false
   if (!u) return false
+  if (t.kind !== 'internal' && !isFinTask(t) && !has(u, 'project.view')) return false
   if (t.kind === 'internal') return canSeeTeamSpace(u, t.teamSpaceId ?? '') || t.assigneeUserId === u.id || t.reviewerId === u.id
   if (t.kind === 'supervision') return canViewSupervisionOf(state, u, t.projectId) || [t.assigneeUserId, t.reporterId, t.reviewerId, ...(t.participantIds ?? [])].includes(u.id)
   // no exception for people named on the task: losing the role closes the space
@@ -158,7 +206,7 @@ export function canManageFlowTask(_state: S, u: User | undefined, t: Task) {
 
 /** Assignment, Estimation, Start/Due of a project work item */
 export function canPlanTask(state: S, u: User | undefined, t: Task) {
-  if (!u) return false
+  if (!has(u, 'task.edit') || !u) return false
   if (isFlowTask(t)) return canManageFlowTask(state, u, t)
   if (!isWorkItem(t)) return false
   if (has(u, 'plan.all')) return true
@@ -185,7 +233,7 @@ export function canAssignTo(state: S, u: User | undefined, t: Task, res: { kind:
 }
 
 export function canEditStatus(state: S, u: User | undefined, t: Task) {
-  if (!u || !isWorkItem(t)) return false
+  if (!u || !has(u, 'task.edit') || !isWorkItem(t)) return false
   if (has(u, 'status.all')) return true
   const project = projectOf(state, t.projectId)
   if (project?.staffing) {
@@ -271,13 +319,13 @@ const ID = /^[A-Za-z0-9][\w:.|~@-]{0,95}$/
 /** A new record must bring a well-formed id that is not taken yet (two people creating at the same moment never overwrite each other) */
 function newIdError(state: State, a: AnyAction): string | null {
   const taken = (list: { id: string }[], id: string) => list.some((x) => x.id === id)
-  const check = (id: unknown, exists: (id: string) => boolean) => (typeof id !== 'string' || !ID.test(id) ? 'شناسه‌ی رکورد نامعتبر است.' : exists(id) ? 'رکوردی با همین شناسه هست؛ دوباره امتحان کنید.' : null)
+  const check = (id: unknown, exists: (id: string) => boolean) => (typeof id !== 'string' || !ID.test(id) ? "The record ID is invalid." : exists(id) ? "There is a record with the same ID, try again." : null)
   switch (a.type) {
     case 'addTask': case 'createFlowTask': return check((a.task as Task)?.id, (id) => !!state.tasks[id])
     case 'internalProjectAdd': return check((a.project as { id: string })?.id, (id) => taken(state.internalProjects, id))
     case 'addHoliday': return check((a.holiday as { id: string })?.id, (id) => taken(state.holidays, id))
     case 'addLeave': return check((a.leave as { id: string })?.id, (id) => taken(state.leaves, id))
-    case 'addUser': return check((a.user as User)?.id, (id) => taken(state.users, id)) ?? (state.users.some((u) => u.username === (a.user as User).username) ? 'این نام کاربری قبلاً گرفته شده است.' : null)
+    case 'addUser': return check((a.user as User)?.id, (id) => taken(state.users, id)) ?? (state.users.some((u) => u.username === (a.user as User).username) ? "This username has already been taken." : null)
     case 'statusAdd': return check((a.status as { id: string })?.id, (id) => (state.statusSets[String(a.scope)] ?? []).some((x) => x.id === id))
     case 'teamAdd': return check((a.team as Team)?.id, (id) => taken(state.teams, id))
     case 'projectAdd': return check((a.project as Project)?.id, (id) => taken(state.projects, id))
@@ -287,387 +335,402 @@ function newIdError(state: State, a: AnyAction): string | null {
 
 /** Returns a reason when the signed-in user may not perform the action, or null when it is allowed */
 export function guard(state: State, a: AnyAction): string | null {
+  if (a.type === 'roleSave' || a.type === 'roleDelete' || a.type === 'roleAssign') return roleGuard(state, a)
+  if (a.type === 'whiteboardSave' || a.type === 'whiteboardDelete') return whiteboardGuard(state, a)
   if (OFFICE_ACTIONS.has(a.type)) return officeGuard(state, a)
   if (WORKSPACE_ACTIONS.has(a.type)) return workspaceGuard(state, a)
   const viewer = state.users.find(u => u.id === state.session)
-  if (viewer?.role === 'ceo' && ['reqCreate', 'tsSave', 'tsPunch', 'tsUnpaid'].includes(a.type)) return 'تایم‌شیت و درخواست شخصی برای مدیرعامل فعال نیست.'
+  if (viewer?.role === 'ceo' && ['reqCreate', 'tsSave', 'tsPunch', 'tsUnpaid'].includes(a.type)) return "Timesheets and personal requests are unavailable to the CEO."
   const me = userOf(state, state.session)
   const tOf = (id: unknown) => state.tasks[String(id)]
   switch (a.type) {
     // public / session / per-viewer UI state
     case 'login': {
       const u = state.users.find((x) => x.id === a.id)
-      return u && u.status === 'active' ? null : 'این حساب فعال نیست.'
+      return u && u.status === 'active' ? null : "This account is inactive."
     }
     case 'register': {
-      if (state.session) return 'با حساب فعال نمی‌توان درخواست عضویت تازه ثبت کرد.'
+      if (state.session) return "Sign out before requesting another account."
       const u = a.user as User
-      if (!u || typeof u.id !== 'string' || !ID.test(u.id) || state.users.some((x) => x.id === u.id)) return 'شناسه‌ی حساب نامعتبر است.'
-      if (state.users.some((x) => x.username === u.username)) return 'این نام کاربری قبلاً گرفته شده است.'
-      return u.status === 'pending' && u.role === 'member' ? null : 'حساب تازه فقط با وضعیت «در انتظار تأیید» ساخته می‌شود.'
+      if (!u || typeof u.id !== 'string' || !ID.test(u.id) || state.users.some((x) => x.id === u.id)) return "The account ID is invalid."
+      if (state.users.some((x) => x.username === u.username)) return "This username has already been taken."
+      return u.status === 'pending' && u.role === 'member' ? null : "The new account will only be created with the “waiting confirmation” status."
     }
-    case 'logout': case 'setDigits': case 'setTheme': case 'nav': case 'readNotifs': case 'readChannel': case 'openProfile':
+    case 'logout': case 'setTheme': case 'nav': case 'readNotifs': case 'readChannel': case 'openProfile':
       return null
     // jobs that the system runs on its own (write-back timer, run bookkeeping)
     case 'updateRun': case 'flushWriteBack': return null
     // the server's own Sync and Write-back jobs: only the system (no signed-in user) may record their results
-    case 'sysRunStart': case 'sysSyncResult': case 'sysWriteBack': return state.session ? 'این کار را فقط خود سامانه (Sync و Write-back) انجام می‌دهد.' : null
+    case 'sysRunStart': case 'sysSyncResult': case 'sysWriteBack': return state.session ? "It only works with Sync and Write-back." : null
   }
-  if (!me) return 'برای این کار باید وارد شوید.'
+  if (!me) return "Sign in to continue."
+  const required = ACTION_PERMISSIONS[a.type]
+  if (required && !has(me, required)) return "Your role does not allow this action."
   const idErr = newIdError(state, a)
   if (idErr) return idErr
   switch (a.type) {
     case 'openTask': {
       if (a.id == null) return null
       const t = tOf(a.id)
-      return !t ? 'این تسک وجود ندارد.' : canViewTask(state, me, t) ? null : 'به این تسک دسترسی ندارید.'
+      return !t ? "This task does not exist." : canViewTask(state, me, t) ? null : "You do not have access to this task."
     }
     case 'classifyTasks': {
-      if (!Array.isArray(a.ids) || !a.ids.length || a.ids.length > Object.keys(state.tasks).length || new Set(a.ids).size !== a.ids.length) return 'فهرست تسک‌ها نامعتبر است.'
-      if (!PROJECT_STAGES.includes(a.projectStage as never)) return 'مرحلهٔ پروژه نامعتبر است.'
-      if (a.workScope != null && (!has(me, 'plan.all') || !WORK_SCOPES.includes(a.workScope as never))) return 'تغییر فاز مسئول برای شما مجاز نیست.'
+      if (!Array.isArray(a.ids) || !a.ids.length || a.ids.length > Object.keys(state.tasks).length || new Set(a.ids).size !== a.ids.length) return "The task list is invalid."
+      if (!PROJECT_STAGES.includes(a.projectStage as never)) return "The project stage is invalid."
+      if (a.workScope != null && (!has(me, 'plan.all') || !WORK_SCOPES.includes(a.workScope as never))) return "Changing the responsible phase is not allowed for you."
       const list = a.ids.map((id: unknown) => tOf(id))
-      if (list.some((t: Task | undefined) => !t || !isWorkItem(t) || !canPlanTask(state, me, t))) return 'طبقه‌بندی فقط برای تسک‌های تحت اختیار شما مجاز است.'
-      if (new Set(list.map((t: Task | undefined) => t?.projectId)).size !== 1) return 'تسک‌ها باید متعلق به یک پروژه باشند.'
+      if (list.some((t: Task | undefined) => !t || !isWorkItem(t) || !canPlanTask(state, me, t))) return "The classification is only allowed for the tasks under your authority."
+      if (new Set(list.map((t: Task | undefined) => t?.projectId)).size !== 1) return "The tasks must belong to the same project."
       return null
     }
     case 'teamAdd': case 'teamUpdate': {
-      if (!has(me, 'users.manage')) return 'مدیریت تیم‌ها فقط برای مدیرعامل و کنترل پروژه است.'
+      if (!has(me, 'users.manage')) return "Managing teams is only for the manager and project control."
       const t = (a.type === 'teamAdd' ? a.team : a.patch) as Team
-      if (a.type === 'teamUpdate' && !state.teams.some((x) => x.id === a.id)) return 'تیم پیدا نشد.'
-      if (!t || typeof t.name !== 'string' || !t.name.trim() || t.name.trim().length > 100) return 'نام تیم باید بین ۱ تا ۱۰۰ نویسه باشد.'
-      if (state.teams.some((x) => x.id !== (a.type === 'teamAdd' ? t.id : a.id) && x.name.trim().normalize('NFC') === t.name.trim().normalize('NFC'))) return 'نام تیم تکراری است.'
-      if (!['fixed', 'phase1', 'phase2', 'revit', 'other', 'supervision', 'management'].includes(t.kind)) return 'نوع تیم نامعتبر است.'
+      if (t?.icon !== undefined && !validIcon(t.icon)) return "Team icon is not valid."
+      if (a.type === 'teamUpdate' && !state.teams.some((x) => x.id === a.id)) return "The team was not found."
+      if (!t || typeof t.name !== 'string' || !t.name.trim() || t.name.trim().length > 100) return "The team name should be between 1 and 100 characters."
+      if (state.teams.some((x) => x.id !== (a.type === 'teamAdd' ? t.id : a.id) && x.name.trim().normalize('NFC') === t.name.trim().normalize('NFC'))) return "The name of the team is repeat."
+      if (!['fixed', 'phase1', 'phase2', 'revit', 'other', 'supervision', 'management'].includes(t.kind)) return "The type of team is invalid."
       return null
     }
     case 'teamArchive': {
-      if (!has(me, 'users.manage')) return 'مدیریت تیم‌ها فقط برای مدیرعامل و کنترل پروژه است.'
-      if (!state.teams.some((t) => t.id === a.id) || typeof a.archived !== 'boolean') return 'تیم یا وضعیت نامعتبر است.'
-      if (a.archived && state.users.some((u) => u.teamId === a.id)) return 'پیش از بایگانی، اعضای تیم را منتقل یا از تیم خارج کنید.'
+      if (!has(me, 'users.manage')) return "Managing teams is only for the manager and project control."
+      if (!state.teams.some((t) => t.id === a.id) || typeof a.archived !== 'boolean') return "The team or situation is invalid."
+      if (a.archived && state.users.some((u) => u.teamId === a.id)) return "Move or exit team members before archiving."
       return null
     }
     case 'teamMember': {
-      if (!has(me, 'users.manage')) return 'تغییر اعضای تیم فقط برای مدیرعامل و کنترل پروژه است.'
+      if (!has(me, 'users.manage')) return "Changing team members is only for the manager and control of the project."
       const target = state.users.find((u) => u.id === a.userId)
-      if (!target) return 'کاربر پیدا نشد.'
-      if (target.role === 'ceo' && me.role !== 'ceo') return 'عضویت مدیرعامل را فقط مدیرعامل تغییر می‌دهد.'
-      if (typeof a.teamId !== 'string' || (a.teamId && !state.teams.some((t) => t.id === a.teamId && !t.archived))) return 'تیم فعال را انتخاب کنید.'
+      if (!target) return "The user was not found."
+      if (target.role === 'ceo' && me.role !== 'ceo') return "The CEO’s membership only changes the CEO."
+      if (typeof a.teamId !== 'string' || (a.teamId && !state.teams.some((t) => t.id === a.teamId && !t.archived))) return "Select an active team."
       return null
     }
-    case 'approveUser': return has(me, 'users.approve') && state.teams.some((t) => t.id === a.teamId && !t.archived) && assignableRoles(me).includes(a.role as Role) ? null : 'تأیید عضویت با این نقش برای شما مجاز نیست.'
-    case 'rejectUser': return has(me, 'users.approve') ? null : 'رد عضویت فقط برای مدیر سیستم، مدیرعامل و کنترل پروژه است.'
+    case 'approveUser': return state.users.some(user => user.id === a.id && user.status === 'pending') && has(me, 'users.approve') && state.teams.some((t) => t.id === a.teamId && !t.archived) && canAssignBuiltIn(state, me, a.role as Role) ? null : "Membership with this role is not allowed for you."
+    case 'rejectUser': return state.users.some(user => user.id === a.id && user.status === 'pending') && has(me, 'users.approve') ? null : "Rejection is only for the system administrator, manager and project control."
     case 'addUser': {
       const u = a.user as User
-      if (u.teamId && !state.teams.some((t) => t.id === u.teamId && !t.archived)) return 'تیم فعال را انتخاب کنید.'
-      return has(me, 'users.manage') && assignableRoles(me).includes(u.role) ? null : 'تعریف کاربر با این نقش برای شما مجاز نیست.'
+      if (u.teamId && !state.teams.some((t) => t.id === u.teamId && !t.archived)) return "Select an active team."
+      return has(me, 'users.manage') && canAssignBuiltIn(state, me, u.role) ? null : "User definition with this role is not allowed for you."
     }
     case 'updateUser': {
       const patch = a.patch as Partial<User>
-      if ('teamId' in patch && patch.teamId && !state.teams.some((t) => t.id === patch.teamId && !t.archived)) return 'تیم فعال را انتخاب کنید.'
+      if ('teamId' in patch && patch.teamId && !state.teams.some((t) => t.id === patch.teamId && !t.archived)) return "Select an active team."
       const self = a.id === me.id
       const sensitive = (['role', 'teamId', 'status', 'capacity'] as const).filter((k) => k in patch)
-      if ('username' in patch && (typeof patch.username !== 'string' || !/^[a-z0-9._-]{3,24}$/.test(patch.username))) return 'نام کاربری باید ۳ تا ۲۴ حرف انگلیسی کوچک، عدد، نقطه، خط تیره یا زیرخط باشد.'
-      if ('username' in patch && state.users.some((x) => x.id !== a.id && x.username === patch.username)) return `نام کاربری ${patch.username} قبلاً گرفته شده است.`
-      if ('name' in patch && !String(patch.name ?? '').trim()) return 'نام کامل را وارد کنید.'
-      if (!self && !has(me, 'users.manage')) return 'ویرایش پروفایل دیگران فقط برای مدیر سیستم و مدیرعامل است.'
-      if (self && sensitive.length && !has(me, 'users.manage')) return 'نقش، تیم و وضعیت حساب خودتان را نمی‌توانید تغییر دهید.'
+      if ('username' in patch && (typeof patch.username !== 'string' || !/^[a-z0-9._-]{3,24}$/.test(patch.username))) return "The user name must be 3 to 24 small English letters, numbers, dots, dark lines or subline."
+      if ('username' in patch && state.users.some((x) => x.id !== a.id && x.username === patch.username)) return `User name ${patch.username} has already been taken.`
+      if ('name' in patch && !String(patch.name ?? '').trim()) return "Enter the full name."
+      if (!self && !has(me, 'users.manage')) return "Editing the profiles of others is only for the system administrator and the manager."
+      if (self && sensitive.length && !has(me, 'users.manage')) return "You can’t change your role, team and account status."
       const target = state.users.find((x) => x.id === a.id)
-      if (patch.role && patch.role !== target?.role && !assignableRoles(me).includes(patch.role)) return FIN_ROLES.includes(patch.role) ? 'نقش مدیر اداری و مدیر مالی (دسترسی فضای مالی و اداری) را فقط مدیرعامل می‌دهد.' : 'دادن این نقش برای شما مجاز نیست.'
-      if (target?.role === 'ceo' && me.role !== 'ceo' && !self) return 'حساب مدیرعامل را فقط خود مدیرعامل ویرایش می‌کند.'
+      if (target && !canAdministerAccount(me, target)) return "You do not have access to this level."
+      if (patch.role !== undefined && !(ROLE_ORDER as readonly unknown[]).includes(patch.role)) return "Invalid role."
+      if (target?.role === 'ceo' && (patch.role && patch.role !== 'ceo' || patch.status && patch.status !== 'active') && !state.users.some(u => u.id !== target.id && u.role === 'ceo' && u.status === 'active')) return "At least one active manager is required."
+      if (patch.role && patch.role !== target?.role && !canAssignBuiltIn(state, me, patch.role)) return FIN_ROLES.includes(patch.role) ? "The role of the administrative manager and financial manager (access to financial and administrative space) only gives the manager." : "Giving this role is not allowed for you."
+      if (target?.role === 'ceo' && me.role !== 'ceo' && !self) return "The CEO’s account only edits the CEO himself."
       return null
     }
     case 'setStatus': {
       const t = tOf(a.taskId)
-      if (!t || !canEditStatus(state, me, t)) return 'تغییر Status این تسک برای شما مجاز نیست.'
+      if (!t || !canEditStatus(state, me, t)) return "Changing the status of this task is not allowed for you."
       const to = statusesFor(state, t).find((s) => s.id === a.statusId)
-      if (to?.category === 'done' && t.reviewerId) return 'این تسک Reviewer دارد؛ برای بستن آن «ارسال برای بررسی» بزنید تا Reviewer تأیید کند.'
-      if (t.flow === 'in_review') return 'این تسک در انتظار بررسی است؛ تا تصمیم Reviewer، Status عوض نمی‌شود.'
+      if (to?.category === 'done' && t.reviewerId) return "This task has a reviewer; to close it, “Send for review” to confirm the reviewer."
+      if (t.flow === 'in_review') return "This task is waiting to be checked; until the reviewer’s decision, Status does not change."
       return null
     }
     case 'savePlan': {
       const t = tOf(a.taskId)
-      if (!t || !isWorkItem(t) || !canPlanTask(state, me, t)) return 'برنامه‌ریزی این تسک برای شما مجاز نیست.'
+      if (!t || !isWorkItem(t) || !canPlanTask(state, me, t)) return "Planning this task is not allowed for you."
       const res = a.assignee as { kind: 'user' | 'team'; id: string } | null
-      if (!canAssignTo(state, me, t, res)) return 'تخصیص فقط به افراد مجاز محدودهٔ همین تسک امکان‌پذیر است.'
-      if (res?.kind === 'team' && !state.teams.some((tm) => tm.id === res.id && !tm.archived)) return 'تیم فعال را انتخاب کنید.'
-      if (!Array.isArray(a.allocations)) return 'برنامهٔ تخصیص نامعتبر است.'
+      if (!canAssignTo(state, me, t, res)) return "It is only possible to assign to authorized persons the scope of this task."
+      if (res?.kind === 'team' && !state.teams.some((tm) => tm.id === res.id && !tm.archived)) return "Select an active team."
+      if (!Array.isArray(a.allocations)) return "The allocation program is invalid."
       if (a.allocations.some((row: unknown) => {
         const x = row as { taskId?: string; userId?: string; teamId?: string; hours?: number }
         return !x || x.taskId !== t.id || !Number.isFinite(x.hours) || Number(x.hours) < 0 || !res || (res.kind === 'user' ? x.userId !== res.id || x.teamId !== userOf(state, res.id)?.teamId : !!x.userId || x.teamId !== res.id)
-      })) return 'تخصیص‌ها باید فقط برای همین تسک و مسئول انتخاب‌شده باشند.'
+      })) return "The allocations should only be chosen for this purpose."
       // after completion, Due / Estimation / assignee feed the point already recorded: CEO and Project Control only
       const resUser = res?.kind === 'user' ? res.id : undefined
       const resTeam = res?.kind === 'team' ? res.id : undefined
       const changed = a.due !== t.due || a.estimation !== t.estimation || resUser !== t.assigneeUserId || resTeam !== t.assigneeTeamId
-      if (isClosed(state, t) && changed && !has(me, 'points.manage')) return 'برنامه‌ی تسک تمام‌شده فقط با مدیرعامل یا کنترل پروژه تغییر می‌کند (امتیاز آن ثبت شده است).'
+      if (isClosed(state, t) && changed && !has(me, 'points.manage')) return "The completed task plan only changes with the manager or project control (the score is registered)."
       return null
     }
     case 'addTask': {
       const t = a.task as Task
-      if (!t || !['manual','phase','stage','doctype'].includes(t.kind) || !projectOf(state, t.projectId)) return 'پروژه یا نوع تسک نامعتبر است.'
-      if (!String(t.name ?? '').trim()) return 'نام تسک لازم است.'
+      if (!t || !['manual','phase','stage','doctype'].includes(t.kind) || !projectOf(state, t.projectId)) return "The project or type of work is invalid."
+      if (!String(t.name ?? '').trim()) return "The name of the task is necessary."
       const nodeError=projectNodeProblem(state.tasks,t);if(nodeError)return nodeError
-      if (t.parentId && (!state.tasks[t.parentId] || state.tasks[t.parentId].projectId !== t.projectId || isFlowTask(state.tasks[t.parentId]))) return 'والد باید متعلق به همین پروژه باشد.'
-      if (t.projectStage != null && !PROJECT_STAGES.includes(t.projectStage)) return 'مرحلهٔ پروژه نامعتبر است.'
-      if (t.workScope != null && !WORK_SCOPES.includes(t.workScope)) return 'محدودهٔ مسئولیت تسک نامعتبر است.'
+      if (t.parentId && (!state.tasks[t.parentId] || state.tasks[t.parentId].projectId !== t.projectId || isFlowTask(state.tasks[t.parentId]))) return "Parents should belong to this project."
+      if (t.projectStage != null && !PROJECT_STAGES.includes(t.projectStage)) return "The project stage is invalid."
+      if (t.workScope != null && !WORK_SCOPES.includes(t.workScope)) return "The liability limit is invalid."
       if (projectOf(state, t.projectId)?.staffing) {
-        if (!taskScope(state.tasks, t)) return 'فاز مسئول تسک را انتخاب کنید.'
-        if (!has(me, 'plan.all') && !managesTaskScope(state, me, t)) return 'ساخت تسک فقط در فاز تحت مدیریت شما مجاز است.'
-      } else if (!canCreateProjectTask(state, me, t.projectId) && !(t.parentId && canPlanTask(state, me, state.tasks[t.parentId]))) return 'ساخت تسک در این پروژه برای شما مجاز نیست.'
-      if (t.assigneeTeamId || (t.assigneeUserId && !canAssignTo(state, me, t, { kind: 'user', id: t.assigneeUserId }))) return 'مسئول تسک باید از افراد مجاز همین فاز باشد.'
+        if (!taskScope(state.tasks, t)) return "Choose the phase responsible for the task."
+        if (!has(me, 'plan.all') && !managesTaskScope(state, me, t)) return "Task building is only allowed in the phase under your management."
+      } else if (!canCreateProjectTask(state, me, t.projectId) && !(t.parentId && canPlanTask(state, me, state.tasks[t.parentId]))) return "The construction of this project is not allowed for you."
+      if (t.assigneeTeamId || (t.assigneeUserId && !canAssignTo(state, me, t, { kind: 'user', id: t.assigneeUserId }))) return "The person responsible should be the authorized person of this phase."
       return null
     }
     case 'createFlowTask': {
       const t = a.task as Task
-      if (t.kind !== 'supervision' && t.kind !== 'internal' && t.kind !== 'finadmin') return 'نوع تسک نامعتبر است.'
+      if (t.kind !== 'supervision' && t.kind !== 'internal' && t.kind !== 'finadmin') return "The type of relief is invalid."
       if (t.kind === 'finadmin') {
         const sp = finSpaceOf(t)
-        if (!sp || t.teamSpaceId) return 'Task مالی و اداری فقط در فضای مالی یا فضای اداری ثبت می‌شود.'
-        if (!canSeeFinSpace(me, sp)) return sp === 'finance' ? 'فضای مالی فقط برای مدیرعامل و مدیر مالی است.' : 'فضای اداری فقط برای مدیرعامل و مدیر اداری است.'
-        if (!finPerson(state, t, t.assigneeUserId) || !finPerson(state, t, t.reviewerId) || (t.participantIds ?? []).some((id) => !finPerson(state, t, id))) return 'مسئول، Reviewer و مشارکت‌کنندگان باید از افراد همین فضا باشند.'
-        if (t.progressPct != null && !(Number.isInteger(t.progressPct) && t.progressPct >= 0 && t.progressPct <= 100)) return 'درصد پیشرفت باید عددی بین ۰ تا ۱۰۰ باشد.'
+        if (!sp || t.teamSpaceId) return "Financial and administrative tasks are recorded only in the financial space or office space."
+        if (!canSeeFinSpace(me, sp)) return sp === 'finance' ? "The financial space is only for the manager and the financial manager." : "The office space is only for the manager and director."
+        if (!finPerson(state, t, t.assigneeUserId) || !finPerson(state, t, t.reviewerId) || (t.participantIds ?? []).some((id) => !finPerson(state, t, id))) return "Responsible, reviewer and participants should be people in this space."
+        if (t.progressPct != null && !(Number.isInteger(t.progressPct) && t.progressPct >= 0 && t.progressPct <= 100)) return "The percentage of progress must be between 0 and 100."
       }
-      if (t.progressPct != null && t.kind !== 'finadmin') return 'درصد پیشرفت این تسک از مرحله‌ی گردش‌کار می‌آید.'
-      if (!String(t.name ?? '').trim()) return 'عنوان را وارد کنید.'
-      if (t.start && t.due && t.due < t.start) return 'Due Date نمی‌تواند قبل از Start باشد.'
+      if (t.progressPct != null && t.kind !== 'finadmin') return "The percentage of progress of this task comes from the workflow phase."
+      if (!String(t.name ?? '').trim()) return "Enter the title."
+      if (t.start && t.due && t.due < t.start) return "Due date cannot be before the start."
       if (t.parentId) {
         const parent = state.tasks[t.parentId]
-        if (!parent || parent.kind !== t.kind || parent.projectId !== t.projectId || !canViewTask(state, me, parent)) return 'تسک والد معتبر نیست.'
+        if (!parent || parent.kind !== t.kind || parent.projectId !== t.projectId || !canViewTask(state, me, parent)) return "Parenting is not valid."
       }
       const proj = state.projects.find((p) => p.id === t.projectId)
-      if (t.kind === 'supervision' && !proj) return 'پروژه پیدا نشد.'
+      if (t.kind === 'supervision' && !proj) return "The project was not found."
       if (t.assigneeUserId) {
         const target = userOf(state, t.assigneeUserId)
-        if (!target) return 'مجری انتخاب‌شده فعال نیست.'
-        if (t.kind === 'internal' && target.teamId !== t.teamSpaceId) return 'تسک داخلی فقط به اعضای همان تیم ارجاع می‌شود.'
-        if (t.kind === 'supervision' && proj && !projectTeams(proj).includes(target.teamId)) return 'مجری باید از تیم‌های همین پروژه باشد.'
+        if (!target) return "The selected host is not active."
+        if (t.kind === 'internal' && target.teamId !== t.teamSpaceId) return "Internal stress is only referred to members of the same team."
+        if (t.kind === 'supervision' && proj && !projectTeams(proj).includes(target.teamId)) return "He should be a member of the team of this project."
       }
-      if (t.reviewerId && t.reviewerId === t.assigneeUserId) return 'Reviewer نمی‌تواند مجری همان تسک باشد.'
-      return canCreateTaskOfKind(state, me, t.kind, t) ? null : t.kind === 'supervision' ? 'ثبت مورد نظارتی فقط برای ناظر و مدیرعامل است.' : t.kind === 'finadmin' ? 'Task مالی و اداری فقط در فضای خودش و توسط افراد همان فضا ثبت می‌شود.' : 'فقط اعضای همین تیم (و مدیرعامل و کنترل پروژه) در فضای تیم تسک می‌سازند.'
+      if (t.reviewerId && t.reviewerId === t.assigneeUserId) return "The reviewer can’t be the same as the coach."
+      return canCreateTaskOfKind(state, me, t.kind, t) ? null : t.kind === 'supervision' ? "The registration is only for the supervisor and the director." : t.kind === 'finadmin' ? "The financial and administrative task is recorded only in its own space and by the people of the same space." : "Only members of the same team (and the CEO and project control) make it easy in the team space."
     }
     case 'updateTask': {
       const t = tOf(a.taskId)
-      if (!t || !canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
+      if (!t || !canViewTask(state, me, t)) return "You do not have access to this task."
       const patch = a.patch as Partial<Task>
       const keys = Object.keys(patch)
-      if ('projectStage' in patch && (!isWorkItem(t) || !patch.projectStage || !PROJECT_STAGES.includes(patch.projectStage))) return 'مرحلهٔ پروژه نامعتبر است.'
+      if ('projectStage' in patch && (!isWorkItem(t) || !patch.projectStage || !PROJECT_STAGES.includes(patch.projectStage))) return "The project stage is invalid."
       if ('workScope' in patch) {
-        if (!isWorkItem(t) || !patch.workScope || !WORK_SCOPES.includes(patch.workScope)) return 'محدودهٔ مسئولیت نامعتبر است.'
-        if (patch.workScope !== taskScope(state.tasks, t) && !has(me, 'plan.all')) return 'انتقال تسک بین فازها فقط برای نقش‌های دارای اختیار برنامه‌ریزی کل است.'
+        if (!isWorkItem(t) || !patch.workScope || !WORK_SCOPES.includes(patch.workScope)) return "The scope of responsibility is invalid."
+        if (patch.workScope !== taskScope(state.tasks, t) && !has(me, 'plan.all')) return "The transition between phases is only for the functions of the total planning authority."
       }
-      if ('parentId' in patch && patch.parentId !== t.parentId) return 'جابه‌جایی والد از این مسیر مجاز نیست.'
-      if ('name' in patch && !String(patch.name ?? '').trim()) return 'عنوان خالی است.'
+      if ('parentId' in patch && patch.parentId !== t.parentId) return "Parents are not allowed to move in this direction."
+      if ('name' in patch && !String(patch.name ?? '').trim()) return "The title is empty."
       if ('progressPct' in patch) {
-        if (!isFinTask(t)) return 'درصد پیشرفت این تسک از Status یا مرحله‌ی گردش‌کار می‌آید.'
-        if (patch.progressPct == null || !(Number.isInteger(patch.progressPct) && patch.progressPct >= 0 && patch.progressPct <= 100)) return 'درصد پیشرفت باید عددی بین ۰ تا ۱۰۰ باشد.'
-        if (flowOf(t) === 'closed' || flowOf(t) === 'in_review') return 'پیشرفت تسک بسته یا در انتظار بررسی تغییر نمی‌کند.'
+        if (!isFinTask(t)) return "The percentage of progress of this task comes from Status or the workflow stage."
+        if (patch.progressPct == null || !(Number.isInteger(patch.progressPct) && patch.progressPct >= 0 && patch.progressPct <= 100)) return "The percentage of progress must be between 0 and 100."
+        if (flowOf(t) === 'closed' || flowOf(t) === 'in_review') return "The progress of the task will not change or wait for the review."
         // the person doing the work reports progress; the rest of the task stays with its managers
         if (keys.length === 1 && (t.assigneeUserId === me.id || canManageFlowTask(state, me, t))) return null
       }
       if ('wf' in patch) {
-        if (isFinTask(t)) return 'Taskهای فضای مالی و اداری امتیاز ندارند.'
-        if (!has(me, 'points.manage')) return 'W.F از پارامترهای امتیاز است و فقط مدیرعامل و کنترل پروژه آن را تعیین می‌کنند.'
-        if (patch.wf != null && !(patch.wf >= 0.1 && patch.wf <= 5)) return 'W.F باید بین ۰٫۱ و ۵ باشد.'
+        if (isFinTask(t)) return "Financial and administrative space tasks are not rated."
+        if (!has(me, 'points.manage')) return "W.F. is a score parameter and only the manager and control of the project determine it."
+        if (patch.wf != null && !(patch.wf >= 0.1 && patch.wf <= 5)) return "W.F. should be between 0.1 and 5."
       }
-      if (!isFinTask(t) && isClosed(state, t) && keys.some((k) => ['due', 'estimation'].includes(k)) && !has(me, 'points.manage')) return 'Due و Estimation تسک تمام‌شده فقط با مدیرعامل یا کنترل پروژه تغییر می‌کند.'
-      if ('reviewerId' in patch && t.flow === 'in_review') return 'تا تصمیم درباره‌ی دور فعلی، Reviewer عوض نمی‌شود.'
-      if ('reviewerId' in patch && patch.reviewerId && patch.reviewerId === t.assigneeUserId) return 'Reviewer نمی‌تواند مجری همان تسک باشد.'
+      if (!isFinTask(t) && isClosed(state, t) && keys.some((k) => ['due', 'estimation'].includes(k)) && !has(me, 'points.manage')) return "Due and Estimation of the completed task will only change with the manager or project control."
+      if ('reviewerId' in patch && t.flow === 'in_review') return "Until the decision about the current round, the reviewer will not change."
+      if ('reviewerId' in patch && patch.reviewerId && patch.reviewerId === t.assigneeUserId) return "The reviewer can’t be the same as the coach."
       if (isWorkItem(t)) {
-        if (t.source === 'mdr' && 'name' in patch) return 'نام سند از MDR می‌آید و فقط با Sync عوض می‌شود.'
+        if (t.source === 'mdr' && 'name' in patch) return "The document name comes from the MDR and only changes with Sync."
         if (keys.some((k) => ['due', 'start', 'estimation', 'assigneeUserId', 'assigneeTeamId', 'baselineDue', 'baselineEstimation', 'actualStart', 'actualFinish', 'statusId', 'flow', 'projectId', 'kind'].includes(k)))
-          return 'این فیلدها فقط از مسیر برنامه‌ریزی، Status یا اصلاح تاریخ واقعی تغییر می‌کنند.'
-        return canPlanTask(state, me, t) ? null : 'ویرایش مشخصات این تسک برای شما مجاز نیست.'
+          return "These fields only change from the planning path, status, or real date correction."
+        return canPlanTask(state, me, t) ? null : "Editing the specifications of this task is not allowed for you."
       }
       if (keys.some((k) => ['supervisionStatusId', 'flow', 'baselineDue', 'baselineEstimation', 'actualStart', 'actualFinish', 'projectId', 'kind', 'teamSpaceId', 'assigneeUserId'].includes(k)))
-        return 'وضعیت، ارجاع و تاریخ واقعی فقط از مسیر گردش‌کار تغییر می‌کند.'
-      if ('internalProjectId' in patch && patch.internalProjectId && !state.internalProjects.some((p) => p.id === patch.internalProjectId && p.teamId === t.teamSpaceId)) return 'پروژه‌ی داخلی متعلق به این تیم نیست.'
-      if (isFinTask(t) && (!finPerson(state, t, patch.reviewerId) || (patch.participantIds ?? []).some((id) => !finPerson(state, t, id)))) return 'Reviewer و مشارکت‌کنندگان باید از افراد همین فضا باشند.'
-      if ('name' in patch && !String(patch.name ?? '').trim()) return 'عنوان خالی است.'
-      return canManageFlowTask(state, me, t) ? null : 'ویرایش این تسک برای شما مجاز نیست.'
+        return "The situation, the reference and the actual date only change through the workflow."
+      if ('internalProjectId' in patch && patch.internalProjectId && !state.internalProjects.some((p) => p.id === patch.internalProjectId && p.teamId === t.teamSpaceId)) return "The internal project does not belong to this team."
+      if (isFinTask(t) && (!finPerson(state, t, patch.reviewerId) || (patch.participantIds ?? []).some((id) => !finPerson(state, t, id)))) return "The reviewer and the participants should be from people in this space."
+      if ('name' in patch && !String(patch.name ?? '').trim()) return "The title is empty."
+      return canManageFlowTask(state, me, t) ? null : "Editing this task is not allowed for you."
     }
     case 'flow': {
       const t = tOf(a.taskId)
-      if (!t || !canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
+      if (!t || !canViewTask(state, me, t)) return "You do not have access to this task."
       const op = a.op as string
       const f = flowOf(t)
       const note = String(a.note ?? '').trim()
       if (isWorkItem(t)) {
         // review overlay of project work items
         if (op === 'submit') {
-          if (!t.reviewerId) return 'برای این تسک Reviewer تعیین نشده است.'
-          if (t.flow === 'in_review') return 'این تسک همین حالا در انتظار بررسی است.'
-          return canEditStatus(state, me, t) && !(t.reviewerId === me.id) ? (note ? null : 'شرح کار انجام‌شده لازم است.') : 'ارسال برای بررسی فقط برای مسئول یا تیم مسئول است.'
+          if (!t.reviewerId) return "No reviewer has been set for this task."
+          if (t.flow === 'in_review') return "This post is currently awaiting review."
+          return canEditStatus(state, me, t) && !(t.reviewerId === me.id) ? (note ? null : "The description of the work is required.") : "Sending to check is only responsible for the officer or team."
         }
         if (op === 'approve' || op === 'rework') {
-          if (t.flow !== 'in_review') return 'تسک در انتظار بررسی نیست.'
-          if (op === 'rework' && !note) return 'دلیل بازگشت برای اصلاح لازم است.'
-          return canDecideReview(state, me, t) ? null : 'فقط Reviewer این تسک یا مدیرعامل تصمیم می‌گیرد.'
+          if (t.flow !== 'in_review') return "The staff is not waiting for a review."
+          if (op === 'rework' && !note) return "The reason for the return is necessary for correction."
+          return canDecideReview(state, me, t) ? null : "Only the reviewer decides this task or the CEO."
         }
-        return 'این عملیات برای تسک پروژه معتبر نیست.'
+        return "This operation is not valid for project relief."
       }
       switch (op) {
         case 'assign': {
-          if (f === 'closed' || f === 'in_review') return 'در این مرحله نمی‌توان ارجاع را عوض کرد.'
+          if (f === 'closed' || f === 'in_review') return "At this point, you can't change the reference."
           const target = userOf(state, a.assigneeId as string)
-          if (!target) return 'کاربر انتخاب‌شده فعال نیست.'
-          if (t.kind === 'internal' && target.teamId !== t.teamSpaceId) return 'تسک داخلی فقط به اعضای همان تیم ارجاع می‌شود.'
-          if (isFinTask(t) && !finPerson(state, t, target.id)) return finSpaceOf(t) === 'finance' ? 'Task فضای مالی فقط به مدیرعامل یا مدیر مالی ارجاع می‌شود.' : 'Task فضای اداری فقط به مدیرعامل یا مدیر اداری ارجاع می‌شود.'
+          if (!target) return "The selected user is not active."
+          if (t.kind === 'internal' && target.teamId !== t.teamSpaceId) return "Internal stress is only referred to members of the same team."
+          if (isFinTask(t) && !finPerson(state, t, target.id)) return finSpaceOf(t) === 'finance' ? "The financial space task is referred only to the manager or financial manager." : "The task of the office space is referred only to the manager or director."
           const proj = state.projects.find((p) => p.id === t.projectId)
-          if (t.kind === 'supervision' && proj && !projectTeams(proj).includes(target.teamId)) return 'مجری باید از تیم‌های همین پروژه باشد.'
-          if (target.id === t.reviewerId) return 'Reviewer نمی‌تواند مجری همان تسک باشد.'
-          return canManageFlowTask(state, me, t) ? null : 'ارجاع این تسک برای شما مجاز نیست.'
+          if (t.kind === 'supervision' && proj && !projectTeams(proj).includes(target.teamId)) return "He should be a member of the team of this project."
+          if (target.id === t.reviewerId) return "The reviewer can’t be the same as the coach."
+          return canManageFlowTask(state, me, t) ? null : "Referring to this task is not allowed for you."
         }
         case 'start':
-          if (f !== 'assigned' && f !== 'rework') return 'تسک در مرحله‌ی شروع نیست.'
-          return isExecutor(state, me, t) ? null : 'فقط مجری تسک کار را شروع می‌کند.'
+          if (f !== 'assigned' && f !== 'rework') return "It's not at the starting point."
+          return isExecutor(state, me, t) ? null : "It just starts working."
         case 'submit':
-          if (f !== 'in_progress' && f !== 'rework') return 'برای ارسال، تسک باید در حال اجرا یا برگشتی باشد.'
-          if (!isExecutor(state, me, t)) return 'فقط مجری تسک برای بررسی ارسال می‌کند.'
-          if (!t.reviewerId && t.kind === 'supervision') return 'مورد نظارتی Reviewer ندارد.'
-          return note ? null : 'شرح کار انجام‌شده لازم است.'
+          if (f !== 'in_progress' && f !== 'rework') return "To send, the task must be running or returning."
+          if (!isExecutor(state, me, t)) return "Only the owner sends it to check."
+          if (!t.reviewerId && t.kind === 'supervision') return "There is no reviewer monitoring."
+          return note ? null : "The description of the work is required."
         case 'complete':
-          if ((t.kind !== 'internal' && t.kind !== 'finadmin') || t.reviewerId) return 'این تسک باید برای بررسی ارسال شود.'
-          if (f !== 'in_progress' && f !== 'rework') return 'تسک در حال اجرا نیست.'
-          return t.assigneeUserId === me.id || canManageFlowTask(state, me, t) ? null : 'بستن این تسک برای شما مجاز نیست.'
+          if ((t.kind !== 'internal' && t.kind !== 'finadmin') || t.reviewerId) return "This task must be sent to check."
+          if (f !== 'in_progress' && f !== 'rework') return "It's not running."
+          return t.assigneeUserId === me.id || canManageFlowTask(state, me, t) ? null : "Closing this task is not allowed for you."
         case 'approve': case 'rework':
-          if (f !== 'in_review') return 'تسک در انتظار بررسی نیست.'
-          if (op === 'rework' && !note) return 'دلیل بازگشت برای اصلاح لازم است.'
-          return canDecideReview(state, me, t) ? null : 'فقط Reviewer این تسک یا مدیرعامل تصمیم می‌گیرد.'
+          if (f !== 'in_review') return "The staff is not waiting for a review."
+          if (op === 'rework' && !note) return "The reason for the return is necessary for correction."
+          return canDecideReview(state, me, t) ? null : "Only the reviewer decides this task or the CEO."
         case 'reopen':
-          if (f !== 'closed') return 'فقط تسک بسته‌شده دوباره باز می‌شود.'
-          if (!note) return 'دلیل بازگشایی لازم است.'
-          return canDecideReview(state, me, t) || canManageFlowTask(state, me, t) ? null : 'بازگشایی این تسک برای شما مجاز نیست.'
+          if (f !== 'closed') return "It just opens up again."
+          if (!note) return "The reason for the reopening is necessary."
+          return canDecideReview(state, me, t) || canManageFlowTask(state, me, t) ? null : "Opening up this task is not allowed for you."
       }
-      return 'عملیات نامعتبر است.'
+      return "Operation is invalid."
     }
     case 'addAttachments': {
       const t = tOf(a.taskId)
-      if (!t || !canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
+      if (!t || !canViewTask(state, me, t)) return "You do not have access to this task."
       const files = (a.files as { size: number }[]) ?? []
-      if (!files.length) return 'فایلی انتخاب نشده است.'
-      if (files.length > MAX_FILES) return `حداکثر ${MAX_FILES} فایل در هر بار.`
-      if (files.some((f) => f.size > MAX_FILE)) return 'حجم هر فایل حداکثر ۳ مگابایت است.'
+      if (!files.length) return "File is not selected."
+      if (files.length > MAX_FILES) return `Maximum ${MAX_FILES} files per time.`
+      if (files.some((f) => f.size > MAX_FILE)) return "The maximum file size is 3 MB."
       const involved = [t.assigneeUserId, t.reporterId, t.reviewerId, ...(t.participantIds ?? [])].includes(me.id)
-      return involved || canPlanTask(state, me, t) || canEditStatus(state, me, t) ? null : 'افزودن پیوست فقط برای افراد همین تسک است.'
+      return involved || canPlanTask(state, me, t) || canEditStatus(state, me, t) ? null : "Adding attachment is just that for people."
     }
     case 'setActual': {
       const t = tOf(a.taskId)
-      if (!t) return 'تسک پیدا نشد.'
-      if (!canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
-      if (!String(a.reason ?? '').trim()) return 'دلیل اصلاح تاریخ واقعی لازم است.'
-      if (a.actualStart && a.actualFinish && String(a.actualFinish) < String(a.actualStart)) return 'Actual Finish نمی‌تواند قبل از Actual Start باشد.'
-      return has(me, 'actual.edit') ? null : 'اصلاح دستی تاریخ واقعی فقط برای کنترل پروژه و مدیرعامل است.'
+      if (!t) return "Task not found."
+      if (!canViewTask(state, me, t)) return "You do not have access to this task."
+      if (!String(a.reason ?? '').trim()) return "The reason for correcting real history is needed."
+      if (a.actualStart && a.actualFinish && String(a.actualFinish) < String(a.actualStart)) return "The actual final cannot be before the actual start."
+      return has(me, 'actual.edit') ? null : "The manual modification of real history is only for project control and the manager."
     }
     // ---------- work log ----------
     case 'logWork': case 'editWorkLog': case 'deleteWorkLog': {
       const log = a.type === 'logWork' ? undefined : state.workLogs.find((l) => l.id === a.id)
-      if (a.type !== 'logWork' && (!log || log.deletedAt)) return 'این رکورد Work Log وجود ندارد.'
+      if (a.type !== 'logWork' && (!log || log.deletedAt)) return "There is no working log record."
       const t = tOf(a.type === 'logWork' ? (a.log as { taskId: string }).taskId : log!.taskId)
-      if (!t) return 'تسک پیدا نشد.'
-      if (!canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
-      if (isFinTask(t)) return 'Taskهای فضای مالی و اداری Work Log ندارند.'
-      if (a.type === 'logWork') { if (!canLogTime(state, me, t)) return 'ثبت زمان روی این تسک فقط برای مسئول، مشارکت‌کنندگان، Reviewer و تیم مسئول است.' }
+      if (!t) return "Task not found."
+      if (!canViewTask(state, me, t)) return "You do not have access to this task."
+      if (isFinTask(t)) return "There are no financial and administrative work log tasks."
+      if (a.type === 'logWork') { if (!canLogTime(state, me, t)) return "Record time on this task is only responsible for participants, reviewers and the team." }
       else {
-        if (!canEditLog(state, me, log!, t)) return log!.userId === me.id ? 'تسک بسته شده است؛ اصلاح Work Log آن با کنترل پروژه است.' : 'ویرایش یا حذف Work Log دیگران فقط برای مدیرعامل و کنترل پروژه است.'
-        if (log!.userId !== me.id && !String(a.reason ?? '').trim()) return 'برای تغییر Work Log دیگران دلیل لازم است.'
+        if (!canEditLog(state, me, log!, t)) return log!.userId === me.id ? "The task is closed; its work log correction is controlled by the project." : "Editing or deleting the work log of others is only for the manager and control of the project."
+        if (log!.userId !== me.id && !String(a.reason ?? '').trim()) return "There is a reason to change the work log of others."
       }
       if (a.type === 'deleteWorkLog') return null
       const v = (a.type === 'logWork' ? a.log : { ...log, ...(a.patch as object) }) as { minutes: number; workDate: string; description: string }
-      if (!Number.isInteger(v.minutes) || v.minutes < 1 || v.minutes > MAX_DAY_MINUTES) return 'مدت‌زمان باید بین ۱ دقیقه و ۲۴ ساعت باشد.'
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v.workDate)) || v.workDate > TODAY) return 'تاریخ انجام کار نمی‌تواند در آینده باشد.'
-      if (String(v.description ?? '').trim().length < 2) return 'توضیح فعالیت لازم است.'
+      if (!Number.isInteger(v.minutes) || v.minutes < 1 || v.minutes > MAX_DAY_MINUTES) return "The duration should be between 1 minute and 24 hours."
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v.workDate)) || v.workDate > TODAY) return "The date of work cannot be in the future."
+      if (String(v.description ?? '').trim().length < 2) return "It is necessary to explain the activity."
       const owner = a.type === 'logWork' ? me.id : log!.userId
-      if (dayTotal(state.workLogs, owner, v.workDate, log?.id) + v.minutes > MAX_DAY_MINUTES) return 'جمع زمان ثبت‌شده‌ی این نفر در این روز از ۲۴ ساعت بیشتر می‌شود.'
+      if (dayTotal(state.workLogs, owner, v.workDate, log?.id) + v.minutes > MAX_DAY_MINUTES) return "The amount of time recorded on this day is more than 24 hours."
       return null
     }
     // ---------- points ----------
     case 'pointRecalc': {
       const t = tOf(a.taskId)
-      if (!t) return 'تسک پیدا نشد.'
-      if (!canViewTask(state, me, t)) return 'به این تسک دسترسی ندارید.'
-      if (isFinTask(t)) return 'Taskهای فضای مالی و اداری امتیاز ندارند.'
-      return has(me, 'points.manage') ? null : 'بازمحاسبه‌ی امتیاز فقط برای مدیرعامل و کنترل پروژه است.'
+      if (!t) return "Task not found."
+      if (!canViewTask(state, me, t)) return "You do not have access to this task."
+      if (isFinTask(t)) return "Financial and administrative space tasks are not rated."
+      return has(me, 'points.manage') ? null : "Recalculating points is only for the manager and control of the project."
     }
-    case 'pointAdjust': case 'pointConfig': return 'امتیاز فقط با فرمول ثابت و تاریخ‌های تسک محاسبه می‌شود؛ اصلاح دستی و ضرایب قبلی غیرفعال‌اند.'
+    case 'pointAdjust': case 'pointConfig': return "Scores are calculated only by constant formula and relief dates; manual corrections and previous coefficients are inactive."
     case 'internalProjectAdd': {
       const ip = a.project as { teamId: string }
-      return canCreateInternalProject(me, ip.teamId) ? null : 'ساخت پروژه‌ی داخلی فقط برای سرپرست همان تیم (یا مدیرعامل) است.'
+      return canCreateInternalProject(me, ip.teamId) ? null : "The construction of the internal project is only for the head of the same team (or CEO)."
     }
     case 'internalProjectUpdate': {
       const ip = state.internalProjects.find((p) => p.id === a.id)
-      return ip && canCreateInternalProject(me, ip.teamId) ? null : 'ویرایش این پروژه‌ی داخلی برای شما مجاز نیست.'
+      return ip && canCreateInternalProject(me, ip.teamId) ? null : "This internal project is not allowed for you."
     }
     case 'addComment': {
       const t = tOf(a.taskId)
-      return t && canViewTask(state, me, t) ? null : 'به این تسک دسترسی ندارید.'
+      return t && canViewTask(state, me, t) ? null : "You do not have access to this task."
     }
     case 'sendMessage': {
       const ch = String(a.channelId)
-      if (ch === 'announce' && !has(me, 'announce.post')) return 'ارسال اطلاعیه فقط برای مدیریت، کنترل پروژه و مدیر سیستم است.'
+      if (ch === 'announce' && !has(me, 'announce.post')) return "Send notifications only for management, project control and system manager."
       if (ch.startsWith('project:')) {
         const p = state.projects.find((x) => `project:${x.id}` === ch)
-        if (!p) return 'کانال پیدا نشد.'
+        if (!p) return "The channel was not found."
         const member = projectTeams(p).includes(me.teamId) || ['ceo', 'management'].includes(me.role) || projectPeople(p).includes(me.id)
-        return member ? null : 'عضو این پروژه نیستید.'
+        return member ? null : "You are not a member of this project."
       }
       return null
     }
     case 'review': {
       const ids = new Set(a.ids as string[])
       const projects = new Set(state.syncItems.filter((x) => ids.has(x.id)).map((x) => x.projectId))
-      return [...projects].every((pid) => canSyncProject(state, me, pid)) ? null : 'تأیید Sync Review برای این پروژه مجاز نیست.'
+      return [...projects].every((pid) => canSyncProject(state, me, pid)) ? null : "Sync Review approval is not allowed for this project."
     }
     case 'addRun': {
       const run = a.run as { projectId: string }
-      return run.projectId === 'all' ? (has(me, 'sync.run') ? null : 'Sync همه‌ی پروژه‌ها مجاز نیست.') : canSyncProject(state, me, run.projectId) ? null : 'Sync این پروژه برای شما مجاز نیست.'
+      return run.projectId === 'all' ? (has(me, 'sync.run') ? null : "Sync is not allowed for all projects.") : canSyncProject(state, me, run.projectId) ? null : "Sync this project is not allowed for you."
     }
     case 'addHoliday': case 'removeHoliday':
-      return has(me, 'calendar.manage') ? null : 'ثبت تعطیلات رسمی فقط برای کنترل پروژه و مدیرعامل است.'
-    case 'addLeave': case 'removeLeave': case 'reqCreate': case 'reqDecide': case 'reqWithdraw': case 'reqCancel':
+      return has(me, 'calendar.manage') ? null : "The official holiday registration is only for project control and the manager."
+    case 'addLeave': case 'removeLeave': case 'reqCreate': case 'reqItUpdate': case 'reqDecide': case 'reqWithdraw': case 'reqCancel':
     case 'tsSave': case 'tsPunch': case 'tsUnpaid': case 'monthClose': case 'tsConfig':
       return guardAdmin(state, me, a)
     case 'ptCreate': case 'ptUpdate': case 'ptDelete': case 'ptMove': case 'psSave':
       return guardPersonal(state, me, a)
     case 'statusAdd': case 'statusUpdate': case 'statusDelete': case 'statusOverride': case 'statusInherit':
-      return has(me, 'statuses.manage') ? null : 'مدیریت Statusها فقط برای کنترل پروژه و مدیرعامل است.'
+      return has(me, 'statuses.manage') ? null : "Statistics management is only for project control and management."
     case 'projectAdd': case 'projectUpdate': {
-      if (!has(me, 'project.define')) return 'تعریف و ویرایش پروژه فقط برای مدیرعامل و کنترل پروژه است.'
+      if (!has(me, 'project.define')) return "A project management license is required."
+      if (a.type === 'projectUpdate' && ['staffing', 'phase1TeamId', 'phase2TeamId', 'teamIds', 'managerId'].some(key => Object.hasOwn(a.patch as object, key)) && !has(me, 'staffing.edit')) return "An executive structure editing license is required."
       const p = (a.type === 'projectAdd' ? a.project : a.patch) as Partial<Project>
+      const previous = a.type === 'projectUpdate' ? state.projects.find(x => x.id === a.id) : undefined
       if (a.type === 'projectAdd') {
         const code = String(p.code ?? '')
         // the office codes projects by number (458, 386, 320) or by Latin letters (BBT)
-        if (!/^[A-Z0-9]{2,8}$/.test(code) || p.id !== code) return 'کد پروژه ۲ تا ۸ نویسه از حروف بزرگ لاتین یا عدد است (مثل 458 یا BBT).'
-        if (state.projects.some((x) => x.id === code)) return `کد ${code} قبلاً استفاده شده است.`
-        if (!String(p.name ?? '').trim()) return 'نام پروژه را وارد کنید.'
+        if (!/^[A-Z0-9]{2,8}$/.test(code) || p.id !== code) return "The project code is 2 to 8 characters of large Latin letters or numbers (such as 458 or BBT)."
+        if (state.projects.some((x) => x.id === code)) return `Code ${code} has already been used.`
+        if (!String(p.name ?? '').trim()) return "Enter the project name."
         // every project is defined with its own MDR: the tasks come from it
-        if (!isMdrUrl(p.mdrUrl)) return 'لینک MDR (Google Sheet) خود این پروژه لازم است.'
+        if (!isMdrUrl(p.mdrUrl)) return "The MDR (Google Sheet) link is required for this project."
       } else {
-        if (!state.projects.some((x) => x.id === a.id)) return 'پروژه پیدا نشد.'
-        if ('id' in p || 'code' in p) return 'کد پروژه بعد از تعریف عوض نمی‌شود.'
-        if ('mdrUrl' in p && !isMdrUrl(p.mdrUrl)) return 'لینک MDR باید لینک Google Sheet خود MDR این پروژه باشد.'
-        if ('name' in p && !String(p.name ?? '').trim()) return 'نام پروژه خالی است.'
+        if (!previous) return "The project was not found."
+        if ('id' in p || 'code' in p) return "The project code will not change after the definition."
+        if ('mdrUrl' in p && !isMdrUrl(p.mdrUrl)) return "The MDR link should be the Google Sheet link of the MDR itself."
+        if ('name' in p && !String(p.name ?? '').trim()) return "The project name is empty."
       }
-      if (('phase1TeamId' in p || a.type === 'projectAdd') && !state.teams.some((t) => t.id === p.phase1TeamId && !t.archived)) return 'تیم فاز ۱ را انتخاب کنید.'
-      if (('phase2TeamId' in p || a.type === 'projectAdd') && !state.teams.some((t) => t.id === p.phase2TeamId && !t.archived)) return 'تیم فاز ۲ را انتخاب کنید.'
-      if ('mdrTab' in p && !String(p.mdrTab ?? '').trim()) return 'نام برگه‌ی (Tab) MDR لازم است.'
+      const detailError = projectDetailProblem(p, previous, state.users, state.teams)
+      if (detailError) return detailError
+      if (('phase1TeamId' in p || a.type === 'projectAdd') && !state.teams.some((t) => t.id === p.phase1TeamId && !t.archived)) return "Choose the Phase 1 team."
+      if (('phase2TeamId' in p || a.type === 'projectAdd') && !state.teams.some((t) => t.id === p.phase2TeamId && !t.archived && (t.kind === 'phase2' || t.kind === 'revit'))) return "Choose the Team Phase 2."
+      if ('mdrTab' in p && !String(p.mdrTab ?? '').trim()) return "The MDR tab name is required."
       if ('staffing' in p) { const error = staffingProblem(p.staffing, state.users); if (error) return error }
-      if ('revitTeamId' in p && p.revitTeamId && !state.teams.some((t) => t.id === p.revitTeamId && !t.archived)) return 'تیم رویت فعال را انتخاب کنید.'
-      if ('teamIds' in p && (!Array.isArray(p.teamIds) || new Set(p.teamIds).size !== p.teamIds.length || p.teamIds.some((id) => !state.teams.some((t) => t.id === id && !t.archived)))) return 'تیم‌های مرتبط نامعتبرند.'
-      if (p.managerId && userOf(state, p.managerId)?.role !== 'pm') return 'مدیر پروژه باید کاربر فعالی با نقش مدیر پروژه باشد.'
+      if ('revitTeamId' in p) return "Set the vision team in the selection of Phase 2 team."
+      if ('teamIds' in p && (!Array.isArray(p.teamIds) || new Set(p.teamIds).size !== p.teamIds.length || p.teamIds.some((id) => !state.teams.some((t) => t.id === id && !t.archived && t.kind !== 'revit')))) return "Related teams are invalid."
+      if (p.managerId && userOf(state, p.managerId)?.role !== 'pm') return "The project manager must be an active user with the role of the project manager."
       return null
     }
   }
-  return 'عملیات ناشناخته.'
+  return "Operation Unknown."
 }
 
 // ---------- administrative module ----------
 /** Own timesheet always; everybody's for the CEO, Project Control and the Administrative Manager */
 export const canSeeTimesheetOf = (u: User | undefined, userId: string) => !!u && (u.id === userId || has(u, 'timesheet.view.all'))
 /** Own requests; the approvers and the report roles see all of them */
-export const canSeeRequest = (u: User | undefined, r: AdminRequest) => !!u && (r.userId === u.id || has(u, 'requests.office') || has(u, 'requests.ceo') || has(u, 'admin.reports'))
+export const managesItRequests = (u: User | undefined) => has(u, 'requests.it')
+export const canHandleItRequest = (u: User | undefined, r: AdminRequest) => managesItRequests(u) && r.kind === 'it' && (r.status === 'pending_it' || r.status === 'it_in_progress')
+
+export const canSeeRequest = (u: User | undefined, r: AdminRequest) => !!u && (r.userId === u.id || (r.kind === 'it' ? managesItRequests(u) : has(u, 'requests.office') || has(u, 'requests.ceo') || has(u, 'admin.reports')))
 /** The approver step a pending request is waiting for */
 export const canDecideRequest = (u: User | undefined, r: AdminRequest) =>
-  !!u && r.userId !== u.id && ((r.status === 'pending_office' && has(u, 'requests.office')) || (r.status === 'pending_ceo' && has(u, 'requests.ceo')))
+  !!u && r.kind !== 'it' && r.userId !== u.id && ((r.status === 'pending_office' && has(u, 'requests.office')) || (r.status === 'pending_ceo' && has(u, 'requests.ceo')))
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
 function guardAdmin(state: State, me: User, a: AnyAction): string | null {
@@ -676,162 +739,173 @@ function guardAdmin(state: State, me: User, a: AnyAction): string | null {
   const reqOf = (id: unknown) => state.adminRequests.find((r) => r.id === id)
   switch (a.type) {
     case 'addLeave': {
-      if (!has(me, 'leave.direct')) return 'ثبت مستقیم مرخصی فقط با مدیر اداری است؛ دیگران از «درخواست‌های اداری» مرخصی می‌گیرند.'
+      if (!has(me, 'leave.direct')) return "Direct leave registration is only with the administrative manager; others take leave of “office requests.”"
       const l = a.leave as { userId?: string; date?: string; hours?: number; note?: string }
       const u = userOf(state, l?.userId)
-      if (!u) return 'کاربر پیدا نشد.'
-      if (!l.date || !ISO.test(l.date)) return 'تاریخ مرخصی را انتخاب کنید.'
-      if (isMonthClosed(closes, l.date)) return 'ماه این تاریخ بسته شده است.'
-      if (!(Number(l.hours) > 0 && Number(l.hours) <= u.capacity)) return `مقدار مرخصی باید بین صفر و ${u.capacity} ساعت باشد.`
-      if (!String(l.note ?? '').trim()) return 'دلیل ثبت مستقیم را بنویسید.'
+      if (!u) return "The user was not found."
+      if (!l.date || !ISO.test(l.date)) return "Choose the date of vacation."
+      if (isMonthClosed(closes, l.date)) return "The month of this date is closed."
+      if (!(Number(l.hours) > 0 && Number(l.hours) <= u.capacity)) return `The amount of leave must be between zero and ${u.capacity} hours.`
+      if (!String(l.note ?? '').trim()) return "Write down the reason for the direct registration."
       return null
     }
     case 'removeLeave': {
-      if (!has(me, 'leave.direct')) return 'حذف مرخصی فقط با مدیر اداری است.'
+      if (!has(me, 'leave.direct')) return "Removal of leave is only with the manager."
       const l = state.leaves.find((x) => x.id === a.id)
-      if (!l) return 'این مرخصی پیدا نشد.'
-      if (l.requestId) return 'این مرخصی از یک درخواست تأییدشده آمده است؛ آن را از خود درخواست لغو کنید.'
-      return isMonthClosed(closes, l.date) ? 'ماه این تاریخ بسته شده است.' : null
+      if (!l) return "This vacation was not found."
+      if (l.requestId) return "The leave comes from an approved application; cancel it from yourself."
+      return isMonthClosed(closes, l.date) ? "The month of this date is closed." : null
     }
     case 'reqCreate': {
-      const r = a.req as { kind?: string; description?: string; leave?: never; overtime?: { date?: string; minutes?: number; taskIds?: string[] }; other?: { title?: string; category?: string; date?: string } }
+      const r = a.req as { kind?: string; description?: string; leave?: never; it?: { title?: unknown }; overtime?: { date?: string; minutes?: number; taskIds?: string[] }; other?: { title?: string; category?: string; date?: string } }
       const files = (a.files ?? []) as { size: number }[]
-      if (files.length > MAX_FILES) return `حداکثر ${MAX_FILES} فایل در هر بار.`
-      if (files.some((f) => f.size > MAX_FILE)) return 'حجم هر فایل حداکثر ۳ مگابایت است.'
-      if (String(r?.description ?? '').length > 2000) return 'توضیحات طولانی است.'
+      if (files.length > MAX_FILES) return `Maximum ${MAX_FILES} files per time.`
+      if (files.some((f) => f.size > MAX_FILE)) return "The maximum file size is 3 MB."
+      if (typeof r?.description !== 'string' || r.description.length > 2000) return "The explanation is long."
       if (r?.kind === 'leave') {
         return checkLeave(r.leave, { holidays, today: TODAY, cfg: configFor(state.timesheetConfigs, TODAY), closes, existing: state.leaves, pending: state.adminRequests, userId: me.id })
       }
       if (r?.kind === 'overtime') {
         const o = r.overtime
         const date = String(o?.date ?? '')
-        if (!ISO.test(date)) return 'تاریخ اضافه‌کاری را انتخاب کنید.'
+        if (!ISO.test(date)) return "Choose an overtime date."
         const err = checkOvertime(o, { today: TODAY, closes, day: state.timesheets[dayKey(me.id, date)], requests: overtimeIndex(state.adminRequests).get(dayKey(me.id, date)) ?? [] })
         if (err) return err
         const ids = Array.isArray(o?.taskIds) ? o!.taskIds : []
-        if (ids.length > 20) return 'حداکثر ۲۰ تسک.'
-        if (ids.some((id) => !state.tasks[id] || !canViewTask(state, me, state.tasks[id]))) return 'یکی از تسک‌های انتخاب‌شده در دسترس شما نیست.'
+        if (ids.length > 20) return "Up to 20 ts."
+        if (ids.some((id) => !state.tasks[id] || !canViewTask(state, me, state.tasks[id]))) return "One of the selected tasks is not available to you."
         // the request is read by the approvers and the report roles (Project Control included): no finance & admin task in it
-        if (ids.some((id) => isFinTask(state.tasks[id]))) return 'Taskهای فضای مالی و اداری در درخواست اضافه‌کاری فهرست نمی‌شوند.'
+        if (ids.some((id) => isFinTask(state.tasks[id]))) return "Financial and administrative space tasks are not listed on the overtime application."
+        return null
+      }
+      if (r?.kind === 'it') {
+        if (typeof r.it?.title !== 'string' || !r.it.title.trim() || r.it.title.trim().length > 120) return "The title of the application must be between 1 and 120 EUR."
         return null
       }
       if (r?.kind === 'other') {
         const o = r.other
-        if (!String(o?.title ?? '').trim()) return 'عنوان درخواست را بنویسید.'
-        if (String(o?.title).length > 120) return 'عنوان طولانی است.'
-        if (!o?.category || !(o.category in OTHER_CAT_FA)) return 'دسته‌ی درخواست را انتخاب کنید.'
-        if (o.date && !ISO.test(o.date)) return 'تاریخ نامعتبر است.'
+        if (!String(o?.title ?? '').trim()) return "Write the request title."
+        if (String(o?.title).length > 120) return "The title is long."
+        if (!o?.category || !(o.category in OTHER_CAT_FA)) return "Select the request category."
+        if (o.date && !ISO.test(o.date)) return "History is invalid."
         return null
       }
-      return 'نوع درخواست را انتخاب کنید.'
+      return "Choose the type of request."
+    }
+    case 'reqItUpdate': {
+      const r = reqOf(a.id)
+      if (!r || !canHandleItRequest(me, r)) return "This request is only possible for project control."
+      if ((a.status !== 'it_in_progress' && a.status !== 'it_resolved') || r.status === a.status) return "The selected status is not valid."
+      if (a.note !== undefined && (typeof a.note !== 'string' || a.note.length > 2000)) return "Note is not valid."
+      return null
     }
     case 'reqDecide': {
       const r = reqOf(a.id)
-      if (!r) return 'درخواست پیدا نشد.'
-      if (!isPending(r)) return 'این درخواست دیگر در کارتابل نیست.'
-      if (r.userId === me.id) return 'درخواست خودتان را نمی‌توانید تأیید یا رد کنید.'
-      if (!canDecideRequest(me, r)) return r.status === 'pending_office' ? 'این مرحله با مدیر اداری است.' : 'تصمیم نهایی با مدیرعامل است.'
-      if (a.decision !== 'approve' && a.decision !== 'reject') return 'تصمیم نامعتبر است.'
-      if (a.decision === 'reject' && !String(a.note ?? '').trim()) return 'دلیل رد را بنویسید.'
+      if (!r) return "The request was not found."
+      if (!isPending(r)) return "This request is no longer on the cartel."
+      if (r.userId === me.id) return "You cannot confirm or reject your request."
+      if (!canDecideRequest(me, r)) return r.status === 'pending_office' ? "This step is with the manager." : "The final decision is with the CEO."
+      if (a.decision !== 'approve' && a.decision !== 'reject') return "The decision is invalid."
+      if (a.decision === 'reject' && !String(a.note ?? '').trim()) return "Write down the reason for rejection."
       if (a.decision === 'approve' && r.kind === 'overtime' && a.minutes != null) {
         const cap = [...r.steps].reverse().find((s) => s.stage === 'office' && s.minutes != null)?.minutes ?? r.overtime!.minutes
-        if (!Number.isInteger(a.minutes) || Number(a.minutes) <= 0) return 'مقدار تأییدی را وارد کنید.'
-        if (Number(a.minutes) > cap) return 'مقدار تأییدی نمی‌تواند از مقدار درخواستی یا تأیید مرحله‌ی قبل بیشتر باشد.'
+        if (!Number.isInteger(a.minutes) || Number(a.minutes) <= 0) return "Enter the confirmation value."
+        if (Number(a.minutes) > cap) return "The confirmation value cannot exceed the request value or confirmation of the previous step."
       }
       if (a.decision === 'approve' && r.kind === 'leave' && r.leave) {
         const dates = leaveDates(r.leave, holidays)
-        if (dates.some((d) => isMonthClosed(closes, d))) return 'ماه این مرخصی بسته شده است.'
+        if (dates.some((d) => isMonthClosed(closes, d))) return "The month of this holiday is closed."
       }
       return null
     }
     case 'reqWithdraw': {
       const r = reqOf(a.id)
-      if (!r) return 'درخواست پیدا نشد.'
-      if (r.userId !== me.id) return 'فقط درخواست‌دهنده می‌تواند درخواست را پس بگیرد.'
-      if (!isPending(r) || r.steps.some((s) => s.stage === 'office' || s.stage === 'ceo')) return 'بعد از اولین تصمیم، درخواست را نمی‌توان پس گرفت.'
+      if (!r) return "The request was not found."
+      if (r.userId !== me.id) return "Only the applicant can withdraw the request."
+      if (!isPending(r) || r.steps.some((s) => s.stage === 'office' || s.stage === 'ceo' || s.stage === 'it')) return "After the first decision, the request cannot be withdrawn."
       return null
     }
     case 'reqCancel': {
       const r = reqOf(a.id)
-      if (!r) return 'درخواست پیدا نشد.'
-      if (!has(me, 'requests.office')) return 'لغو مرخصی تأییدشده فقط با مدیر اداری است.'
-      if (r.kind !== 'leave' || r.status !== 'approved') return 'فقط مرخصی تأییدشده را می‌توان لغو کرد.'
-      if (!String(a.note ?? '').trim()) return 'دلیل لغو را بنویسید.'
+      if (!r) return "The request was not found."
+      if (!has(me, 'requests.office')) return "Only the Office Manager can cancel approved leave."
+      if (r.kind !== 'leave' || r.status !== 'approved') return "Only approved leave can be cancelled."
+      if (!String(a.note ?? '').trim()) return "Write down the reason for cancellation."
       const dates = state.leaves.filter((l) => l.requestId === r.id).map((l) => l.date)
-      return dates.some((d) => isMonthClosed(closes, d)) ? 'ماه این مرخصی بسته شده است.' : null
+      return dates.some((d) => isMonthClosed(closes, d)) ? "The month of this holiday is closed." : null
     }
     case 'tsSave': {
       const uid = String(a.userId), date = String(a.date)
       const self = uid === me.id
-      if (!userOf(state, uid)) return 'کاربر پیدا نشد.'
-      if (!self && !has(me, 'timesheet.edit.all')) return 'ثبت و اصلاح تایم‌شیت دیگران فقط با مدیر اداری است.'
-      if (!self && !String(a.reason ?? '').trim()) return 'دلیل اصلاح را بنویسید.'
-      if (!ISO.test(date)) return 'تاریخ نامعتبر است.'
-      if (date > TODAY) return 'تایم‌شیت روزهای آینده را نمی‌توان ثبت کرد.'
-      if (isMonthClosed(closes, date)) return 'ماه این روز بسته شده است.'
+      if (!userOf(state, uid)) return "The user was not found."
+      if (!self && !has(me, 'timesheet.edit.all')) return "Timesheet registration and correction of others is only with the administrative manager."
+      if (!self && !String(a.reason ?? '').trim()) return "Write down the reason for the correction."
+      if (!ISO.test(date)) return "History is invalid."
+      if (date > TODAY) return "Timesheets cannot be recorded in the coming days."
+      if (isMonthClosed(closes, date)) return "This month is closed."
       const cfg = configFor(state.timesheetConfigs, date)
-      if (self && diffDays(TODAY, date) > cfg.editDays) return `فقط ${cfg.editDays} روز گذشته را می‌توانید ثبت یا اصلاح کنید؛ برای روزهای قدیمی‌تر به مدیر اداری بگویید.`
+      if (self && diffDays(TODAY, date) > cfg.editDays) return `Only ${cfg.editDays} you can register or modify the previous day; tell the administrative manager for older days.`
       const reqs = overtimeIndex(state.adminRequests).get(dayKey(uid, date)) ?? []
-      if (self && reqs.some((r) => isPending(r) || r.status === 'approved')) return 'اضافه‌کاری این روز در جریان یا تأییدشده است؛ این روز قفل است.'
+      if (self && reqs.some((r) => isPending(r) || r.status === 'approved')) return "Overwork this day is in progress or confirmed; it is a lock day."
       const ci = a.checkIn as string | undefined, co = a.checkOut as string | undefined
-      if (ci != null && ci !== '' && !isHM(ci)) return 'ساعت ورود نامعتبر است.'
-      if (co != null && co !== '' && !isHM(co)) return 'ساعت خروج نامعتبر است.'
-      if (!ci && co) return 'اول ساعت ورود را وارد کنید.'
+      if (ci != null && ci !== '' && !isHM(ci)) return "Entry time is invalid."
+      if (co != null && co !== '' && !isHM(co)) return "The hour of departure is invalid."
+      if (!ci && co) return "Enter the entry hour first."
       const presence = presenceOf(ci, co)
-      if (presence > MAX_PRESENCE) return 'فاصله‌ی ورود تا خروج بیش از ۲۰ ساعت است؛ ساعت‌ها را بررسی کنید.'
+      if (presence > MAX_PRESENCE) return "Entry distance to departure is more than 20 hours; check the hours."
       const br = a.breakMinutes
-      if (!Number.isInteger(br) || Number(br) < 0 || Number(br) > Math.max(presence, 0) + (co ? 0 : 1440)) return 'مدت استراحت نامعتبر است.'
-      if (co && Number(br) >= presence) return 'مدت استراحت از کل حضور بیشتر است.'
+      if (!Number.isInteger(br) || Number(br) < 0 || Number(br) > Math.max(presence, 0) + (co ? 0 : 1440)) return "The rest period is invalid."
+      if (co && Number(br) >= presence) return "The rest is longer than the whole presence."
       if (date === TODAY) {
         const now = tehranTime()
-        if (ci && ci > now) return 'ساعت ورود هنوز نرسیده است.'
-        if (co && ci && co > ci && co > now) return 'ساعت خروج هنوز نرسیده است.'
-        if (co && ci && co <= ci) return 'خروج بعد از نیمه‌شب امروز هنوز نرسیده است.'
+        if (ci && ci > now) return "The hour of arrival has not yet arrived."
+        if (co && ci && co > ci && co > now) return "The hour of departure has not yet arrived."
+        if (co && ci && co <= ci) return "The exit after midnight has not yet arrived."
       }
-      if (String(a.note ?? '').length > 500) return 'توضیح طولانی است.'
+      if (String(a.note ?? '').length > 500) return "The explanation is long."
       return null
     }
     case 'tsPunch': {
       const d = state.timesheets[dayKey(me.id, TODAY)]
-      if (a.kind === 'in') return d?.checkIn ? 'ورود امروز ثبت شده است.' : null
-      if (a.kind === 'out') return !d?.checkIn ? 'اول ورود را ثبت کنید.' : d.checkOut ? 'خروج امروز ثبت شده است.' : tehranTime() <= d.checkIn ? 'هنوز از ساعت ورود شما زمانی نگذشته است.' : null
-      return 'عملیات نامعتبر است.'
+      if (a.kind === 'in') return d?.checkIn ? "Entry is registered today." : null
+      if (a.kind === 'out') return !d?.checkIn ? "Register first entry." : d.checkOut ? "Today's clock-out has been recorded." : tehranTime() <= d.checkIn ? "It’s not too late since your arrival." : null
+      return "Operation is invalid."
     }
     case 'tsUnpaid': {
       const d = state.timesheets[dayKey(me.id, String(a.date))]
-      if (!d) return 'این روز در تایم‌شیت شما ثبت نشده است.'
-      if (isMonthClosed(closes, d.date)) return 'ماه این روز بسته شده است.'
-      return d.calc.undecided > 0 ? null : 'این روز اضافه‌کاری بدون تعیین تکلیف ندارد.'
+      if (!d) return "This day is not recorded in your time sheet."
+      if (isMonthClosed(closes, d.date)) return "This month is closed."
+      return d.calc.undecided > 0 ? null : "This extra day has nothing to do with the task."
     }
     case 'monthClose': {
-      if (!has(me, 'timesheet.close')) return 'بستن ماه فقط با مدیر اداری است.'
+      if (!has(me, 'timesheet.close')) return "The closing of the month is only with the director."
       const key = String(a.month)
-      if (!/^\d{4}-\d{2}$/.test(key)) return 'ماه نامعتبر است.'
-      if (closes.some((c) => c.month === key)) return 'این ماه پیش‌تر بسته شده است.'
+      if (!/^\d{4}-\d{2}$/.test(key)) return "The moon is invalid."
+      if (closes.some((c) => c.month === key)) return "It was closed last month."
       const { from, to } = monthRange(key)
-      if (to >= TODAY) return 'ماه را بعد از پایانش می‌توان بست.'
+      if (to >= TODAY) return "The moon can be closed after its end."
       const touching = state.adminRequests.filter((r) => isPending(r) && (
         (r.kind === 'overtime' && r.overtime && r.overtime.date >= from && r.overtime.date <= to)
         || (r.kind === 'leave' && r.leave && leaveDates(r.leave, holidays).some((d) => d >= from && d <= to))))
-      return touching.length ? `${touching.length} درخواست مرخصی یا اضافه‌کاری این ماه هنوز در کارتابل است؛ اول آن‌ها را تعیین تکلیف کنید.` : null
+      return touching.length ? `${touching.length} This month’s vacation or overtime application is still in the cartel; first determine their assignment.` : null
     }
     case 'tsConfig': {
-      if (!has(me, 'timesheet.close')) return 'قواعد تایم‌شیت فقط با مدیر اداری است.'
+      if (!has(me, 'timesheet.close')) return "Timesheet rules are only with the administrator."
       const c = a.config as { dutyNetMinutes?: number; minBreakMinutes?: number; editDays?: number; from?: string }
-      if (!Number.isInteger(c?.dutyNetMinutes) || c.dutyNetMinutes! < 60 || c.dutyNetMinutes! > 720) return 'کار خالص روزانه باید بین ۱ تا ۱۲ ساعت باشد.'
-      if (!Number.isInteger(c.minBreakMinutes) || c.minBreakMinutes! < 0 || c.minBreakMinutes! > 180) return 'استراحت باید بین ۰ تا ۱۸۰ دقیقه باشد.'
-      if (!Number.isInteger(c.editDays) || c.editDays! < 0 || c.editDays! > 31) return 'مهلت اصلاح باید بین ۰ تا ۳۱ روز باشد.'
-      if (!c.from || !ISO.test(c.from) || c.from < TODAY) return 'قاعده‌ی تازه از امروز یا بعد از آن اعمال می‌شود؛ روزهای گذشته جابه‌جا نمی‌شوند.'
-      return String(a.reason ?? '').trim() ? null : 'دلیل تغییر را بنویسید.'
+      if (!Number.isInteger(c?.dutyNetMinutes) || c.dutyNetMinutes! < 60 || c.dutyNetMinutes! > 720) return "The daily net work should be between 1 and 12 hours."
+      if (!Number.isInteger(c.minBreakMinutes) || c.minBreakMinutes! < 0 || c.minBreakMinutes! > 180) return "Rest should be between 0 and 180 minutes."
+      if (!Number.isInteger(c.editDays) || c.editDays! < 0 || c.editDays! > 31) return "The correction period should be between 0 and 31 days."
+      if (!c.from || !ISO.test(c.from) || c.from < TODAY) return "The new rules apply from today or after; the previous days will not be moved."
+      return String(a.reason ?? '').trim() ? null : "Write down the reason for the change."
     }
   }
-  return 'عملیات ناشناخته.'
+  return "Operation Unknown."
 }
 
 // ---------- personal tasks ----------
 // Owner only, for every role: nobody — the CEO and Project Control included — reads or changes another person's personal tasks.
 // An id that is not yours gets the same answer as an id that does not exist, so nothing about other people's lists leaks.
-const NOT_YOURS = 'این کار شخصی در دسترس شما نیست.'
+const NOT_YOURS = "This personal work is not available to you."
 function guardPersonal(state: State, me: User, a: AnyAction): string | null {
   const own = (id: unknown) => { const t = state.personalTasks[String(id)]; return t && t.ownerId === me.id ? t : undefined }
   const board = boardOf(state.personalBoards, me.id)
@@ -840,21 +914,21 @@ function guardPersonal(state: State, me: User, a: AnyAction): string | null {
       const f = (a.task ?? {}) as { title?: string; description?: string; priority?: string; start?: string; due?: string; parentId?: string | null; statusId?: string }
       const err = checkFields({ ...f, priority: f.priority ?? 'normal' })
       if (err) return err
-      if (f.statusId && !board.statuses.some((x) => x.id === f.statusId)) return 'Status نامعتبر است.'
+      if (f.statusId && !board.statuses.some((x) => x.id === f.statusId)) return "Status is invalid."
       if (f.parentId) {
         const p = own(f.parentId)
         if (!p) return NOT_YOURS
-        if (depthOf(state.personalTasks, p) + 1 >= MAX_DEPTH) return `حداکثر ${MAX_DEPTH} سطح Task و Subtask.`
+        if (depthOf(state.personalTasks, p) + 1 >= MAX_DEPTH) return `Tasks and subtasks can be nested up to ${MAX_DEPTH} levels.`
       }
-      return tasksOf(state.personalTasks, me.id).length >= 2000 ? 'تعداد کارهای شخصی به سقف رسیده است.' : null
+      return tasksOf(state.personalTasks, me.id).length >= 2000 ? "The number of personal tasks has reached the ceiling." : null
     }
     case 'ptUpdate': {
       const t = own(a.id)
       if (!t) return NOT_YOURS
       const patch = (a.patch ?? {}) as Record<string, unknown>
       const allowed = ['title', 'description', 'statusId', 'priority', 'start', 'due']
-      if (Object.keys(patch).some((k) => !allowed.includes(k))) return 'این فیلد قابل تغییر نیست.'
-      if (patch.statusId !== undefined && !board.statuses.some((x) => x.id === patch.statusId)) return 'Status نامعتبر است.'
+      if (Object.keys(patch).some((k) => !allowed.includes(k))) return "This field cannot be changed."
+      if (patch.statusId !== undefined && !board.statuses.some((x) => x.id === patch.statusId)) return "Status is invalid."
       const merged = { ...t, ...patch } as { title: string; description?: string; priority: string; start?: string; due?: string }
       return checkFields(merged)
     }
@@ -866,10 +940,10 @@ function guardPersonal(state: State, me: User, a: AnyAction): string | null {
       if (pid) {
         const p = own(pid)
         if (!p) return NOT_YOURS
-        if (pid === t.id || descendants(tasksOf(state.personalTasks, me.id), t.id).some((d) => d.id === pid)) return 'یک Task را نمی‌توان زیر Subtaskهای خودش برد.'
-        if (depthOf(state.personalTasks, p) + 1 + heightOf(tasksOf(state.personalTasks, me.id), t.id) >= MAX_DEPTH) return `حداکثر ${MAX_DEPTH} سطح Task و Subtask.`
+        if (pid === t.id || descendants(tasksOf(state.personalTasks, me.id), t.id).some((d) => d.id === pid)) return "A task cannot be taken under its own subtasks."
+        if (depthOf(state.personalTasks, p) + 1 + heightOf(tasksOf(state.personalTasks, me.id), t.id) >= MAX_DEPTH) return `Tasks and subtasks can be nested up to ${MAX_DEPTH} levels.`
       }
-      return Number.isInteger(a.index) && Number(a.index) >= 0 ? null : 'جای تازه نامعتبر است.'
+      return Number.isInteger(a.index) && Number(a.index) >= 0 ? null : "The new place is invalid."
     }
     case 'psSave': {
       const statuses = a.statuses as Parameters<typeof checkBoard>[0]
@@ -878,9 +952,9 @@ function guardPersonal(state: State, me: User, a: AnyAction): string | null {
       const keep = new Set(statuses.map((x) => x.id))
       const remap = (a.remap ?? {}) as Record<string, string>
       const mine = tasksOf(state.personalTasks, me.id)
-      for (const old of board.statuses) if (!keep.has(old.id) && mine.some((t) => t.statusId === old.id) && !keep.has(remap[old.id])) return `برای کارهای Status «${old.name}» یک Status تازه انتخاب کنید.`
+      for (const old of board.statuses) if (!keep.has(old.id) && mine.some((t) => t.statusId === old.id) && !keep.has(remap[old.id])) return `Select a new status for Status ${old.name}.`
       return null
     }
   }
-  return 'عملیات ناشناخته.'
+  return "Operation Unknown."
 }

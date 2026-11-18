@@ -12,15 +12,16 @@ export type TaskType = 'design' | 'documentation' | 'coordination' | 'modeling' 
 /** Workflow of supervision and internal tasks: Create → Assign → Execution → Submit for Review → Approve / Rework → Close */
 export type FlowState = 'open' | 'assigned' | 'in_progress' | 'in_review' | 'rework' | 'closed'
 
-export interface Team { id: string; name: string; kind: TeamKind; brandCode?: import('./brand').TeamCode; parentPhase?: 'CD' | 'DD'; archived?: boolean }
+export interface Team { id: string; name: string; kind: TeamKind; icon?: string; brandCode?: import('./brand').TeamCode; parentPhase?: 'CD' | 'DD'; archived?: boolean }
 export type AccountStatus = 'active' | 'pending' | 'rejected' | 'disabled'
 export interface User {
   id: string; name: string; username: string; teamId: string; role: Role; capacity: number; title?: string
   status: AccountStatus
   /** demo build only; the server keeps a scrypt hash in its own table and never sends it to a browser */
-  password?: string; phone?: string; bio?: string; createdAt: string
+  customRoleId?: string; rolePermissions?: import('./policy').Perm[]
+  password?: string; email?: string | null; phone?: string; bio?: string; createdAt: string
   /** profile photo as a small square data URL */
-  avatar?: string
+  avatar?: string | null
 }
 
 export interface Project {
@@ -32,6 +33,17 @@ export interface Project {
   staffing?: ProjectStaffing
   revitTeamId?: string
   teamIds?: string[]
+  coverImage?: string | null
+  areaM2?: number | null
+  location?: string | null
+  clientName?: string | null
+  structuralConsultant?: string | null
+  mechanicalConsultant?: string | null
+  electricalConsultant?: string | null
+  constructionBy?: string | null
+  supervisorId?: string | null
+  photographer?: string | null
+  interiorDesignByPargar?: boolean | null
   mdrUrl: string; mdrTab: string; lastSync?: string
 }
 
@@ -141,7 +153,7 @@ export type NotifLink =
   | { type: 'task'; id: string }
   | { type: 'project'; id: string }
   | { type: 'chat'; channelId: string }
-  | { type: 'page'; page: string }
+  | { type: 'page'; page: string; requestId?: string }
 export interface Notification {
   id: string; userId: string; at: string; kind: NotifKind; title: string; body?: string
   actorId?: string; link?: NotifLink; read: boolean
@@ -209,9 +221,9 @@ export interface WorkLog {
 }
 
 // ---------- administrative module ----------
-export type AdminRequestKind = 'leave' | 'overtime' | 'other'
+export type AdminRequestKind = 'leave' | 'overtime' | 'other' | 'it'
 /** pending_office → pending_ceo → approved; a rejection at either step ends the request */
-export type AdminRequestStatus = 'pending_office' | 'pending_ceo' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled'
+export type AdminRequestStatus = 'pending_office' | 'pending_ceo' | 'pending_it' | 'it_in_progress' | 'it_resolved' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled'
 export type LeaveCategory = 'unified' | 'annual' | 'sick' | 'unpaid'
 export type OtherCategory = 'mission' | 'certificate' | 'advance_pay' | 'equipment' | 'other'
 /** day: whole working days from..to; hour: one day (from = to) between startTime and endTime */
@@ -221,9 +233,10 @@ export interface OvertimeDetails { date: string; minutes: number; taskIds: strin
 export interface OtherDetails { title: string; category: OtherCategory; date?: string }
 export interface RequestFile { id: string; name: string; mime: string; size: number; dataUrl: string; uploadedAt: string }
 export interface RequestStep {
-  stage: 'submit' | 'office' | 'ceo' | 'withdraw' | 'cancel' | 'system'
+  stage: 'submit' | 'office' | 'ceo' | 'it' | 'withdraw' | 'cancel' | 'system'
   by: string; at: string
   decision?: 'approve' | 'reject'
+  itStatus?: 'it_in_progress' | 'it_resolved'
   note?: string
   /** overtime: minutes approved at this step */
   minutes?: number
@@ -237,7 +250,7 @@ export interface AdminRequest {
   /** when the request reached its current step — response-time reports */
   stageSince: string
   description: string
-  leave?: LeaveDetails; overtime?: OvertimeDetails; other?: OtherDetails
+  leave?: LeaveDetails; overtime?: OvertimeDetails; other?: OtherDetails; it?: { title: string }
   files: RequestFile[]
   steps: RequestStep[]
   /** Leave rows written on final approval (removed again if the leave is cancelled) */

@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { saveTheme, useEnglishLocale } from './preferences'
+import { englishDigits } from './digits'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { buildSeed, refreshToday, TODAY } from './seed'
 import { J_MONTHS, WEEKDAYS, tehranISO, tehranTime, toJalali, weekdayIndex } from './jalali'
@@ -8,36 +10,22 @@ import { RemoteStore, SERVER_MODE } from './remote'
 import { createPlanner } from './planning'
 import {
   canAssignTo, canCreateInternalProject, canCreateProjectTask, canDecideReview, canEditLog, canLogTime, canSeeAllLogs, canEditStatus, canManageFlowTask, canPlanTask, canSeeTeamSpace, canSyncProject, canViewSupervisionOf, canViewTask, has, isExecutor, type Perm,
-  canDecideRequest, canSeeRequest, canSeeTimesheetOf, canSeeAuditEntry, canSeeFinSpace,
+  managesItRequests, canHandleItRequest, canDecideRequest, canSeeRequest, canSeeTimesheetOf, canSeeAuditEntry, canSeeFinSpace,
 } from './policy'
-import { CONTROL_PAGES, WRITEBACK_DELAY_SEC, reducer, rollupMap, type Action, type Nav, type Page, type State, type ThemeChoice } from './state'
-import type { FinSpace } from './domain'
+import { CONTROL_PAGES, WRITEBACK_DELAY_SEC, reducer, rollupMap, type Action, type Page, type State } from './state'
+import { navigationHash, readNavigation } from './navigation'
 
 export * from './state'
 
-const THEME_KEY = 'pargar-theme'
 // The viewer may already set data-theme on <html>; remember it so "system" can hand control back
 const HOST_THEME = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : null
 
-const HASH_PAGES: Page[] = ['documents', 'links', 'home', 'projects', 'workload', 'review', 'runs', 'admin', 'notifications', 'supervision', 'team', 'points', 'requests', 'timesheet', 'inbox', 'adminreports', 'personal', 'finadmin']
-/** What this browser shows (page, theme, digits): restored from the address and local storage */
-function initialUi(): Pick<State, 'persianDigits' | 'nav' | 'openTaskId' | 'profileUserId' | 'theme' | 'profileTab' | 'denial'> {
-  let nav: Nav = { page: 'home' }
-  try {
-    const h = location.hash.replace('#', '')
-    if ((HASH_PAGES as string[]).includes(h)) nav = { page: h as Page }
-    else if (h === 'finadmin-finance' || h === 'finadmin-office' || h === 'finadmin-shared') nav = { page: 'finadmin', space: h.slice(9) as FinSpace }
-    else if (h === 'project-chat') nav = { page: 'pchat' }
-    else if (h === 'chat') nav = { page: 'chat' }
-    else if (h.startsWith('project-')) nav = { page: 'project', projectId: h.slice(8).toUpperCase() }
-    else if (h.startsWith('team-')) nav = { page: 'team', teamId: h.slice(5) }
-  } catch { /* ignore */ }
-  let theme: ThemeChoice = 'system'
-  try { const t = localStorage.getItem(THEME_KEY); if (t === 'light' || t === 'dark') theme = t } catch { /* storage unavailable */ }
-  return { persianDigits: true, nav, openTaskId: null, profileUserId: null, profileTab: 'profile', theme, denial: null }
+function initialUi(): Pick<State, 'nav' | 'openTaskId' | 'profileUserId' | 'theme' | 'profileTab' | 'denial'> {
+  const nav = readNavigation(typeof location === 'undefined' ? '' : location.hash)
+  return { nav, openTaskId: null, profileUserId: null, profileTab: 'profile', theme: 'system', denial: null }
 }
 function init(): State {
-  return { ...buildSeed(), supervisionWorkflows: {}, deadlinePreferences: {}, deadlineEvents: {}, siteVisits: {}, documents: {}, importantLinks: {}, mindMaps: {}, stickyNotes: {}, reminders: {}, writeQueue: [], lastRead: {}, session: null, ...initialUi() }
+  return { ...buildSeed(), roleDefinitions: {}, whiteboards: {}, supervisionWorkflows: {}, deadlinePreferences: {}, deadlineEvents: {}, siteVisits: {}, folderIcons: {}, documents: {}, importantLinks: {}, mindMaps: {}, stickyNotes: {}, reminders: {}, writeQueue: [], lastRead: {}, session: null, ...initialUi() }
 }
 
 // ---------- where the state lives: this page (demo) or the Taraz server ----------
@@ -61,7 +49,26 @@ const GUEST: User = { id: '', name: '', username: '', teamId: '', role: 'member'
 const Ctx = createContext<ReturnType<typeof useStoreValue> | null>(null)
 
 function useStoreValue() {
-  const [state, dispatch] = useSource()
+  const [state, applyAction] = useSource()
+  const dispatch = useCallback((action: Action) => {
+    if (action.type === 'nav') {
+      const hash = navigationHash(action.nav)
+      if (hash !== location.hash) {
+        try { history.pushState(null, '', hash) } catch { /* keep navigation available if history is restricted */ }
+      }
+    }
+    applyAction(action)
+  }, [applyAction])
+  useEffect(() => {
+    const restore = () => applyAction({ type: 'nav', nav: readNavigation(location.hash), fromHistory: true })
+    const hash = navigationHash(readNavigation(location.hash))
+    try {
+      if (hash !== location.hash) history.replaceState(history.state, '', hash)
+    } catch { /* history may be restricted */ }
+    // Traversing entries with different fragments also fires hashchange.
+    window.addEventListener('hashchange', restore)
+    return () => window.removeEventListener('hashchange', restore)
+  }, [applyAction])
   const derived = useMemo(() => rollupMap(state), [state.tasks, state.statusSets])
   const activeUsers = useMemo(() => activeOf(state.users), [state.users])
   const me = state.users.find((u) => u.id === state.session) ?? state.users[0] ?? GUEST
@@ -74,7 +81,10 @@ function useStoreValue() {
 
   const teamOf = (t: Task) => (t.assigneeUserId ? userById[t.assigneeUserId]?.teamId : t.assigneeTeamId) ?? null
   // UI mirrors of lib/policy.ts — the reducer enforces the same rules again on every write
-  const pageAllowed = (p: Page) => me.role === 'ceo' && (p === 'requests' || p === 'timesheet') ? false : p === 'inbox' ? has(me, 'requests.office') || has(me, 'requests.ceo') : p === 'adminreports' ? has(me, 'admin.reports') : p === 'finadmin' ? canSeeFinSpace(me) : !CONTROL_PAGES.includes(p) || has(me, 'control.section')
+  const pageAllowed = (p: Page) =>
+    (p === 'projects' || p === 'project' || p === 'pchat') && !has(me, 'project.view') ? false :
+    (p === 'documents' || p === 'links') && !has(me, 'library.view') ? false :
+    p === 'requests' && !has(me, 'requests.create') ? false : me.role === 'ceo' && (p === 'requests' || p === 'timesheet') ? false : p === 'inbox' ? managesItRequests(me) || has(me, 'requests.office') || has(me, 'requests.ceo') : p === 'adminreports' ? has(me, 'admin.reports') : p === 'finadmin' ? canSeeFinSpace(me) : !CONTROL_PAGES.includes(p) || has(me, 'control.section')
   const can = {
     /** has planning rights somewhere (PM: own projects, lead: own team) */
     plan: has(me, 'plan.all') || state.projects.some((p) => canCreateProjectTask(state, me, p.id)),
@@ -100,6 +110,7 @@ function useStoreValue() {
     viewSupervision: (pid: string) => canViewSupervisionOf(state, me, pid),
     seeTimesheet: (userId: string) => canSeeTimesheetOf(me, userId),
     seeRequest: (r: AdminRequest) => canSeeRequest(me, r),
+    handleItRequest: (r: AdminRequest) => canHandleItRequest(me, r),
     decideRequest: (r: AdminRequest) => canDecideRequest(me, r),
     seeFin: canSeeFinSpace(me),
     seeAudit: (a: AuditEntry) => canSeeAuditEntry(state, me, a),
@@ -122,6 +133,7 @@ function useStoreValue() {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useStoreValue()
   const { state, dispatch } = value
+  const previousSession = useRef(state.session)
   // "today" rolls over at midnight (Tehran) even when the page stays open for days
   const [, setDay] = useState(TODAY)
   useEffect(() => { const h = setInterval(() => { if (refreshToday()) setDay(TODAY) }, 60_000); return () => clearInterval(h) }, [])
@@ -132,7 +144,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const ms = Math.max(0, last + WRITEBACK_DELAY_SEC * 1000 - Date.now())
     const h = setTimeout(() => {
       dispatch({ type: 'flushWriteBack' })
-      toast.success('Write-back انجام شد', { description: 'Last Status، Progress و Last Status Date در MDR به‌روز شد.' })
+      toast.success("Write-back is done", { description: "Last Status, Progress and Last Status Date were updated in MDR." })
     }, ms)
     return () => clearTimeout(h)
   }, [state.writeQueue, dispatch])
@@ -140,21 +152,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement
     if (state.theme === 'system') { if (HOST_THEME) root.setAttribute('data-theme', HOST_THEME); else root.removeAttribute('data-theme') }
     else root.setAttribute('data-theme', state.theme)
-    try { if (state.theme === 'system') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, state.theme) } catch { /* storage unavailable */ }
-  }, [state.theme])
+    if (state.session) saveTheme(state.session, state.theme)
+  }, [state.theme, state.session])
   useEffect(() => {
-    if (state.denial) toast.error('اجازه‌ی این کار را ندارید', { description: state.denial.text })
+    if (state.denial) toast.error(state.denial.title ?? 'Permission denied', { description: state.denial.text })
   }, [state.denial?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const p = state.nav.page
-    const token = p === 'project' ? `project-${state.nav.projectId?.toLowerCase()}` : p === 'pchat' ? 'project-chat' : p === 'team' && state.nav.teamId ? `team-${state.nav.teamId}` : p === 'finadmin' && state.nav.space ? `finadmin-${state.nav.space}` : p
-    try { history.replaceState(null, '', `#${token}`) } catch { /* ignore */ }
-  }, [state.nav])
+    if (previousSession.current && !state.session) {
+      try { history.replaceState(null, '', '#home') } catch { /* history may be restricted */ }
+    }
+    previousSession.current = state.session
+  }, [state.session])
   const phase = SERVER_MODE ? getRemote().phase : 'in'
   if (phase === 'loading' || phase === 'offline') {
     return (
       <div role="status" className="flex min-h-full items-center justify-center p-6 text-center text-[14px] text-muted-foreground">
-        {phase === 'loading' ? 'در حال اتصال به سرور آوند…' : 'سرور آوند در دسترس نیست؛ چند ثانیه‌ی دیگر دوباره تلاش می‌شود.'}
+        {phase === 'loading' ? 'Connecting to Avand…' : 'Avand is unavailable. Retrying in a few seconds.'}
       </div>
     )
   }
@@ -168,15 +181,11 @@ export function useStore() {
 }
 
 // ---------- formatting (all clock times in Asia/Tehran) ----------
-const FA = '۰۱۲۳۴۵۶۷۸۹'
+
 export function useFmt() {
-  const { state } = useStore()
-  const on = state.persianDigits
-  const digits = (s: string | number) => (on ? String(s).replace(/[0-9]/g, (d) => FA[+d]) : String(s))
-  const n = (x: number, frac = 0) => {
-    const s = x.toLocaleString('en-US', { maximumFractionDigits: frac, minimumFractionDigits: 0 })
-    return on ? digits(s.replace(/,/g, '٬').replace('.', '٫')) : s
-  }
+  const locale = useEnglishLocale(useContext(Ctx)?.state.session)
+  const digits = englishDigits
+  const n = (x: number, frac = 0) => x.toLocaleString(locale, { maximumFractionDigits: frac })
   const d = (iso?: string) => {
     if (!iso) return '—'
     const j = toJalali(iso)
@@ -184,28 +193,30 @@ export function useFmt() {
   }
   const dLong = (iso: string) => {
     const j = toJalali(iso)
-    return `${digits(j.jd)} ${J_MONTHS[j.jm - 1]} ${digits(j.jy)}`
+    const month = J_MONTHS[j.jm - 1]
+    return locale === 'en-US' ? month + ' ' + j.jd + ', ' + j.jy : j.jd + ' ' + month + ' ' + j.jy
   }
   const dShort = (iso: string) => {
     const j = toJalali(iso)
-    return `${digits(j.jd)} ${J_MONTHS[j.jm - 1]}`
+    const month = J_MONTHS[j.jm - 1]
+    return locale === 'en-US' ? month + ' ' + j.jd : j.jd + ' ' + month
   }
   /** Clock time of a timestamp in Tehran */
   const clock = (ts: string | Date) => digits(tehranTime(typeof ts === 'string' ? new Date(ts) : ts))
   /** Day label of a timestamp in Tehran: امروز / دیروز / weekday + date */
   const dayLabel = (ts: string) => {
     const day = tehranISO(new Date(ts))
-    if (day === tehranISO()) return 'امروز'
-    if (day === tehranISO(new Date(Date.now() - 86400000))) return 'دیروز'
+    if (day === tehranISO()) return 'Today'
+    if (day === tehranISO(new Date(Date.now() - 86400000))) return 'Yesterday'
     return `${WEEKDAYS[weekdayIndex(day)]} ${dLong(day)}`
   }
   const time = (isoTs: string) => {
     const t = new Date(isoTs)
     const mins = Math.round((Date.now() - t.getTime()) / 60000)
-    if (mins < 1) return 'همین حالا'
-    if (mins < 60) return `${digits(mins)} دقیقه پیش`
-    if (mins < 60 * 24) return `${digits(Math.round(mins / 60))} ساعت پیش`
-    return `${digits(Math.round(mins / 1440))} روز پیش`
+    if (mins < 1) return 'Just now'
+    if (mins < 60) return `${digits(mins)} min ago`
+    if (mins < 60 * 24) return `${digits(Math.round(mins / 60))} h ago`
+    return `${digits(Math.round(mins / 1440))} d ago`
   }
-  return { digits, n, d, dLong, dShort, clock, dayLabel, time, pct: (x: number) => `${n(Math.round(x))}٪`, h: (x: number) => `${n(x, 1)} ساعت` }
+  return { locale, digits, n, d, dLong, dShort, clock, dayLabel, time, pct: (x: number) => `${n(Math.round(x))}%`, h: (x: number) => `${n(x, 1)} h` }
 }

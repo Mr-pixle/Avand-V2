@@ -17,11 +17,11 @@ export const managesSupervisionStatuses=(s:State,u:User)=>u.status==='active'&&(
 export type SupervisionAction={type:'supervisionWorkflow';statuses:SupervisionStatus[];revision:number}|{type:'supervisionStatus';taskId:string;statusId:string}
 export function supervisionGuard(s:State,a:SupervisionAction):string|null{
  const u=s.users.find(u=>u.id===s.session)
- if(!u||!managesSupervisionStatuses(s,u))return 'مدیریت وضعیت نظارت برای مدیرعامل، کنترل پروژه و تیم نظارت است.'
- if(a.type==='supervisionStatus')return s.tasks[a.taskId]?.kind==='supervision'&&supervisionStatuses(s).some(x=>x.id===a.statusId)?null:'مورد یا وضعیت نظارت نامعتبر است.'
- if(a.revision!==(s.supervisionWorkflows?.office?.revision??0))return 'وضعیت‌ها تغییر کرده‌اند؛ صفحه را تازه کنید.'
- if(!Array.isArray(a.statuses)||!a.statuses.length||a.statuses.length>30||a.statuses.some(x=>!x||!/^[-a-zA-Z0-9_]{1,100}$/.test(x.id)||['__proto__','prototype','constructor'].includes(x.id)||typeof x.name!=='string'||!x.name.trim()||x.name.length>80||!FLOW_ORDER.includes(x.phase)||!/^#[0-9a-fA-F]{6}$/.test(x.color))||new Set(a.statuses.map(x=>x.id)).size!==a.statuses.length||new Set(a.statuses.map(x=>x.name.trim())).size!==a.statuses.length)return 'نام، رنگ و مرحله‌های یکتا و معتبر لازم است.'
- for(const t of Object.values(s.tasks).filter(t=>t.kind==='supervision'))if(!a.statuses.some(x=>x.id===supervisionStatus(s,t).id))return 'ابتدا موارد وضعیت حذف‌شونده را به وضعیت دیگری منتقل کنید.'
+ if(!u||!managesSupervisionStatuses(s,u))return "Management is the status of supervision for the CEO, project control and monitoring team."
+ if(a.type==='supervisionStatus')return s.tasks[a.taskId]?.kind==='supervision'&&supervisionStatuses(s).some(x=>x.id===a.statusId)?null:"The case or monitoring status is invalid."
+ if(a.revision!==(s.supervisionWorkflows?.office?.revision??0))return "The situation has changed; refresh the page."
+ if(!Array.isArray(a.statuses)||!a.statuses.length||a.statuses.length>30||a.statuses.some(x=>!x||!/^[-a-zA-Z0-9_]{1,100}$/.test(x.id)||['__proto__','prototype','constructor'].includes(x.id)||typeof x.name!=='string'||!x.name.trim()||x.name.length>80||!FLOW_ORDER.includes(x.phase)||!/^#[0-9a-fA-F]{6}$/.test(x.color))||new Set(a.statuses.map(x=>x.id)).size!==a.statuses.length||new Set(a.statuses.map(x=>x.name.trim())).size!==a.statuses.length)return "Name, color and stage are required."
+ for(const t of Object.values(s.tasks).filter(t=>t.kind==='supervision'))if(!a.statuses.some(x=>x.id===supervisionStatus(s,t).id))return "First, move the deleted items to another situation."
  return null
 }
 export function applySupervision(s:State,a:SupervisionAction):State{
@@ -29,9 +29,9 @@ export function applySupervision(s:State,a:SupervisionAction):State{
  const update=(t:Task,status:SupervisionStatus):Task=>({...t,supervisionStatusId:status.id,flow:status.phase,actualStart:['in_progress','in_review','rework','closed'].includes(status.phase)?t.actualStart??TODAY:t.actualStart,actualFinish:status.phase==='closed'?t.actualFinish??TODAY:undefined})
  if(a.type==='supervisionStatus'){
  const status=supervisionStatuses(s).find(x=>x.id===a.statusId)!,t=s.tasks[a.taskId]
- return {...s,tasks:{...s.tasks,[t.id]:update(t,status)},audit:[{id:`sup-${newId()}`,at,userId:s.session!,kind:'task',taskId:t.id,text:`تغییر وضعیت نظارت: ${supervisionStatus(s,t).name} ← ${status.name}`},...s.audit]}
+ return {...s,tasks:{...s.tasks,[t.id]:update(t,status)},audit:[{id:`sup-${newId()}`,at,userId:s.session!,kind:'task',taskId:t.id,text:`Supervision status: ${supervisionStatus(s,t).name} → ${status.name}`},...s.audit]}
  }
  const tasks={...s.tasks}
  for(const t of Object.values(tasks).filter(t=>t.kind==='supervision')){const old=supervisionStatus(s,t),next=a.statuses.find(x=>x.id===old.id)!;if(next.phase!==flowOf(t))tasks[t.id]=update(t,next)}
- return {...s,tasks,supervisionWorkflows:{...s.supervisionWorkflows,office:{id:'office',revision:a.revision+1,statuses:a.statuses.map(x=>({id:x.id,name:x.name.trim(),phase:x.phase,color:x.color}))}},audit:[{id:`sup-${newId()}`,at,userId:s.session!,kind:'task',text:'ویرایش تعریف و ترتیب مراحل نظارت'},...s.audit]}
+ return {...s,tasks,supervisionWorkflows:{...s.supervisionWorkflows,office:{id:'office',revision:a.revision+1,statuses:a.statuses.map(x=>({id:x.id,name:x.name.trim(),phase:x.phase,color:x.color}))}},audit:[{id:`sup-${newId()}`,at,userId:s.session!,kind:'task',text:"Edit the definition and order of the monitoring steps"},...s.audit]}
 }

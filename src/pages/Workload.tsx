@@ -21,23 +21,23 @@ export function Workload() {
   const span = mode === 'person' ? 14 : 56
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader eyebrow="کنترل پروژه" title="Workload" actions={
-        <Segmented value={mode} onChange={setMode} options={[{ value: 'person', label: 'نفر × روز' }, { value: 'team', label: 'تیم × هفته' }]} />
+      <PageHeader eyebrow="Project Controls" title="Workload" actions={
+        <Segmented value={mode} onChange={setMode} options={[{ value: 'person', label: "Person × Day" }, { value: 'team', label: "Team × Week" }]} />
       }>
-        ظرفیت هر نفر ۸ ساعت در روز کاری، منهای مرخصی و تعطیلی؛ در برابر Allocationهای روزبه‌روز. تسک تیمی از ظرفیت مجموع اعضای تیم کم می‌شود.
+        The capacity of each person is 8 hours per working day, minus vacations and holidays; against day-to-day Allocations.
       </PageHeader>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeek0(addDays(week0, -7))} aria-label="هفته‌ی قبل"><ChevronRight className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => setWeek0(startOfWeek(TODAY))}>این هفته</Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeek0(addDays(week0, 7))} aria-label="هفته‌ی بعد"><ChevronLeft className="h-4 w-4" /></Button>
-          <span className="num ms-2 text-[13px] font-medium">{d(week0)} تا {d(addDays(week0, span - 1))}</span>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeek0(addDays(week0, -7))} aria-label="Last week"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" className="h-8" onClick={() => setWeek0(startOfWeek(TODAY))}>This week</Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeek0(addDays(week0, 7))} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button>
+          <span className="num ms-2 text-[13px] font-medium">{d(week0)} to {d(addDays(week0, span - 1))}</span>
         </div>
         {mode === 'person' && (
           <Select value={team} onValueChange={setTeam}>
             <SelectTrigger id="wl-team" className="h-8 w-[170px] text-[12.5px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">همه‌ی تیم‌ها</SelectItem>
+              <SelectItem value="all">All teams</SelectItem>
               {state.teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -59,10 +59,10 @@ type Planner = ReturnType<ReturnType<typeof useStore>['planner']>
 function Legend() {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-4 text-[11.5px] text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-azure/70" /> تخصیص‌یافته</span>
-      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-leaf-soft ring-1 ring-leaf/30" /> ظرفیت آزاد</span>
-      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-danger-soft ring-1 ring-destructive/40" /> بیش از ظرفیت (مثلاً مرخصی ثبت‌شده بعد از برنامه‌ریزی)</span>
-      <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm ring-1 ring-border" /> تعطیل / مرخصی کامل</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-azure" /> Appropriated</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-leaf-soft ring-1 ring-leaf/30" /> Available Capacity</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-sm bg-danger-soft ring-1 ring-destructive/40" /> More than capacity (e.g., registered leave after planning)</span>
+      <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm ring-1 ring-border" /> Holiday / Full-day Leave</span>
     </div>
   )
 }
@@ -74,9 +74,9 @@ function CellDetail({ user, date }: { user: User; date: string }) {
   const leave = state.leaves.filter((l) => l.userId === user.id && l.date === date)
   return (
     <div className="flex flex-col gap-2 text-[12.5px]">
-      <div className="font-semibold">{user.name}، {dLong(date)}</div>
-      {leave.map((l) => <div key={l.id} className="rounded bg-secondary px-2 py-1">مرخصی {n(l.hours)} ساعت{l.note ? ` — ${l.note}` : ''}</div>)}
-      {allocs.length === 0 ? <div className="text-muted-foreground">Allocation ندارد.</div> : allocs.map((a) => {
+      <div className="font-semibold">{user.name}, {dLong(date)}</div>
+      {leave.map((l) => <div key={l.id} className="rounded bg-secondary px-2 py-1">Leave {n(l.hours)} Time{l.note ? ` — ${l.note}` : ''}</div>)}
+      {allocs.length === 0 ? <div className="text-muted-foreground">There is no Allocation.</div> : allocs.map((a) => {
         const t = state.tasks[a.taskId]
         return (
           <button key={a.taskId} className="flex items-center justify-between gap-2 rounded px-1 py-0.5 text-start hover:bg-accent" onClick={() => dispatch({ type: 'openTask', id: t.id })}>
@@ -100,7 +100,7 @@ function PersonGrid({ week0, team, planner }: { week0: string; team: string; pla
       <table className="w-full min-w-[860px] border-collapse text-[12px]">
         <thead>
           <tr className="border-b bg-foreground/[0.03]">
-            <th className="sticky start-0 z-10 w-[180px] bg-foreground/[0.03] px-3 py-2 text-start text-[11.5px] font-medium text-muted-foreground">نفر</th>
+            <th className="sticky start-0 z-10 w-[180px] bg-foreground/[0.03] px-3 py-2 text-start text-[11.5px] font-medium text-muted-foreground">Man</th>
             {days.map((dd) => {
               const off = isWeekend(dd) || holidays.has(dd)
               const wi = weekdayIndex(dd)
@@ -111,7 +111,7 @@ function PersonGrid({ week0, team, planner }: { week0: string; team: string; pla
                 </th>
               )
             })}
-            <th className="px-3 py-2 text-end text-[11.5px] font-medium text-muted-foreground">جمع</th>
+            <th className="px-3 py-2 text-end text-[11.5px] font-medium text-muted-foreground">All Rights Reserved</th>
           </tr>
         </thead>
         <tbody>
@@ -124,9 +124,9 @@ function PersonGrid({ week0, team, planner }: { week0: string; team: string; pla
               <tr key={tm.id} className="border-b bg-foreground/[0.025]">
                 <td className="sticky start-0 z-10 bg-glass-solid px-3 py-1.5 font-semibold" colSpan={1}>{tm.name}</td>
                 <td colSpan={days.length} className="px-2 py-1.5 text-[11.5px] text-muted-foreground">
-                  {teamLevel > 0.01 && <>تسک‌های تیمی (تخصیص به کل تیم): <span className="num">{n(teamLevel, 1)}</span> ساعت</>}
+                  {teamLevel > 0.01 && <>Team Tasks (Definition to the entire team): <span className="num">{n(teamLevel, 1)}</span> Time</>}
                 </td>
-                <td className="num px-3 py-1.5 text-end text-[11.5px]">{n(Math.round(tCap ? (tUsed / tCap) * 100 : 0))}٪</td>
+                <td className="num px-3 py-1.5 text-end text-[11.5px]">{n(Math.round(tCap ? (tUsed / tCap) * 100 : 0))}%</td>
               </tr>,
               ...members.map((u) => {
                 const cap = days.reduce((s, dd) => s + planner.capacity({ kind: 'user', id: u.id }, dd), 0)
@@ -150,12 +150,12 @@ function PersonGrid({ week0, team, planner }: { week0: string; team: string; pla
                             <PopoverTrigger asChild>
                               <button className={cn('relative flex h-9 w-full items-end overflow-hidden rounded-[4px] text-[11px]',
                                 over ? 'bg-danger-soft ring-1 ring-destructive/50' : c === 0 ? 'hatch bg-foreground/[0.03]' : us === 0 ? 'bg-leaf-soft/45' : 'bg-secondary')}
-                                aria-label={`${u.name}: ${us} از ${c} ساعت`}>
-                                {!over && c > 0 && <span className="absolute inset-x-0 bottom-0 bg-azure/70" style={{ height: `${ratio * 100}%` }} />}
-                                <span className={cn('num relative z-[1] w-full pb-0.5 text-center font-medium', over ? 'text-destructive' : ratio > 0.55 ? 'text-white' : 'text-foreground')}>
-                                  {over ? `+${n(us - c, 1)}` : us ? n(us, 1) : c < 8 && hasLeave ? 'م' : ''}
+                                aria-label={`${u.name}: ${us} From ${c} Hours`}>
+                                {!over && c > 0 && <span className="absolute inset-x-0 bottom-0 bg-azure" style={{ height: `${ratio * 100}%` }} />}
+                                <span className={cn('num relative z-[1] w-full pb-0.5 text-center font-medium', over ? 'text-destructive' : ratio > 0.55 ? 'text-azure-foreground' : 'text-foreground')}>
+                                  {over ? `+${n(us - c, 1)}` : us ? n(us, 1) : c < 8 && hasLeave ? "Â·Â¢ÂÂ¬ÂâÂ¦ÂÃ¢ââ€Â®Â°ÂàÂîÂìÂ" : ''}
                                 </span>
-                                {hasLeave && c > 0 && <span className="absolute end-0.5 top-0.5 z-[1] h-1.5 w-1.5 rounded-full bg-foreground" title="مرخصی" />}
+                                {hasLeave && c > 0 && <span className="absolute end-0.5 top-0.5 z-[1] h-1.5 w-1.5 rounded-full bg-foreground" title="Leave" />}
                               </button>
                             </PopoverTrigger>
                             <PopoverContent className="w-72 p-3" align="center"><CellDetail user={u} date={dd} /></PopoverContent>
@@ -184,21 +184,21 @@ function TeamGrid({ week0, planner }: { week0: string; planner: Planner }) {
       <table className="w-full min-w-[820px] border-collapse text-[12px]">
         <thead>
           <tr className="border-b bg-foreground/[0.03]">
-            <th className="sticky start-0 z-10 w-[150px] bg-foreground/[0.03] px-3 py-2 text-start text-[11.5px] font-medium text-muted-foreground">تیم</th>
-            {weeks.map((w) => <th key={w} className="num min-w-[84px] px-2 py-2 text-start text-[11.5px] font-medium text-muted-foreground">هفته‌ی {d(w).slice(5)}</th>)}
+            <th className="sticky start-0 z-10 w-[150px] bg-foreground/[0.03] px-3 py-2 text-start text-[11.5px] font-medium text-muted-foreground">Team</th>
+            {weeks.map((w) => <th key={w} className="num min-w-[84px] px-2 py-2 text-start text-[11.5px] font-medium text-muted-foreground">The Week {d(w).slice(5)}</th>)}
           </tr>
         </thead>
         <tbody>
           {state.teams.map((tm) => (
             <tr key={tm.id} className="border-b last:border-0">
-              <td className="sticky start-0 z-10 bg-glass-solid px-3 py-2 font-medium">{tm.name}<div className="num text-[11px] font-normal text-muted-foreground">{n(activeUsers.filter((u) => u.teamId === tm.id).length)} نفر</div></td>
+              <td className="sticky start-0 z-10 bg-glass-solid px-3 py-2 font-medium">{tm.name}<div className="num text-[11px] font-normal text-muted-foreground">{n(activeUsers.filter((u) => u.teamId === tm.id).length)} Man</div></td>
               {weeks.map((w) => {
                 let cap = 0, used = 0
                 for (let i = 0; i < 7; i++) { const dd = addDays(w, i); cap += planner.capacity({ kind: 'team', id: tm.id }, dd); used += planner.used({ kind: 'team', id: tm.id }, dd) }
                 const p = cap ? (used / cap) * 100 : 0
                 return (
                   <td key={w} className={cn('border-s px-2 py-2', p > 100 && 'bg-danger-soft')}>
-                    <div className={cn('num font-semibold', p > 100 && 'text-destructive', p === 0 && 'text-muted-foreground')}>{n(Math.round(p))}٪</div>
+                    <div className={cn('num font-semibold', p > 100 && 'text-destructive', p === 0 && 'text-muted-foreground')}>{n(Math.round(p))}%</div>
                     <Bar value={p} className="my-1" tone={p > 100 ? 'danger' : undefined} />
                     <div className="num text-[10.5px] text-muted-foreground">{n(used, 0)}/{n(cap)}h</div>
                   </td>
@@ -222,14 +222,14 @@ function UnassignedPool() {
     <aside className="flex max-h-[720px] min-w-0 flex-col overflow-hidden glass-card">
       <div className="border-b px-4 py-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 font-semibold"><Inbox className="h-4 w-4" /> استخر Unassigned</div>
+          <div className="flex items-center gap-1.5 font-semibold"><Inbox className="h-4 w-4" /> Unassigned Pool</div>
           <span className="num rounded-full bg-secondary px-2 text-[12px]">{n(pool.length)}</span>
         </div>
-        <div className="num mt-0.5 text-[12px] text-muted-foreground">{n(est)} نفر-ساعت Estimation‌شده؛ {n(pool.filter((t) => !t.estimation).length)} تسک بدون Estimation</div>
+        <div className="num mt-0.5 text-[12px] text-muted-foreground">{n(est)} The time-time has passed; {n(pool.filter((t) => !t.estimation).length)} Task without an estimate</div>
         <Select value={pid} onValueChange={setPid}>
           <SelectTrigger id="pool-project" className="mt-2 h-8 text-[12.5px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">همه‌ی پروژه‌ها</SelectItem>
+            <SelectItem value="all">All Projects</SelectItem>
             {state.projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
@@ -240,7 +240,7 @@ function UnassignedPool() {
             <button className="flex w-full items-center gap-2 px-4 py-2 text-start text-[12.5px] hover:bg-foreground/[0.035]" onClick={() => dispatch({ type: 'openTask', id: t.id })}>
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{t.name}</div>
-                <div className="text-[11px] text-muted-foreground">{projectById[t.projectId]?.name}{t.docNumber && <>، <span className="mono">{t.docNumber}</span></>}</div>
+                <div className="text-[11px] text-muted-foreground">{projectById[t.projectId]?.name}{t.docNumber && <>, <span className="mono">{t.docNumber}</span></>}</div>
               </div>
               <span className="num shrink-0 text-[11.5px] text-muted-foreground">{t.estimation ? `${n(t.estimation)}h` : '—'}</span>
             </button>

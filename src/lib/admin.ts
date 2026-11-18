@@ -9,17 +9,18 @@ import type {
   AdminRequest, AdminRequestKind, AdminRequestStatus, Leave, LeaveCategory, LeaveDetails, MonthClose, OtherCategory, TimesheetCalc, TimesheetConfig, TimesheetDay,
 } from './types'
 
-export const KIND_FA: Record<AdminRequestKind, string> = { leave: 'مرخصی', overtime: 'اضافه‌کاری', other: 'سایر' }
+export const KIND_FA: Record<AdminRequestKind, string> = { leave: 'Leave', overtime: 'Overtime', other: 'Other Requests', it: 'IT Support' }
 export const STATUS_FA: Record<AdminRequestStatus, string> = {
-  pending_office: 'در کارتابل مدیر اداری', pending_ceo: 'در کارتابل مدیرعامل', approved: 'تأیید نهایی', rejected: 'رد شد', withdrawn: 'پس گرفته شد', cancelled: 'لغو شد',
+  pending_it: 'With Project Controls', it_in_progress: 'In Progress', it_resolved: 'Resolved',
+  pending_office: 'With Office Manager', pending_ceo: 'With CEO', approved: 'Approved', rejected: 'Rejected', withdrawn: 'Withdrawn', cancelled: 'Cancelled',
 }
-export const LEAVE_CAT_FA: Record<LeaveCategory, string> = { unified: 'مرخصی', annual: 'استحقاقی', sick: 'استعلاجی', unpaid: 'بدون حقوق' }
-export const OTHER_CAT_FA: Record<OtherCategory, string> = { mission: 'مأموریت', certificate: 'گواهی اشتغال', advance_pay: 'مساعده', equipment: 'تجهیزات', other: 'سایر' }
-export const PENDING: AdminRequestStatus[] = ['pending_office', 'pending_ceo']
+export const LEAVE_CAT_FA: Record<LeaveCategory, string> = { unified: 'Leave', annual: 'Annual Leave', sick: 'Sick Leave', unpaid: 'Unpaid Leave' }
+export const OTHER_CAT_FA: Record<OtherCategory, string> = { mission: 'Business Trip', certificate: 'Employment Certificate', advance_pay: 'Advance Pay', equipment: 'Equipment', other: 'Other' }
+export const PENDING: AdminRequestStatus[] = ['pending_office', 'pending_ceo', 'pending_it', 'it_in_progress']
 export const isPending = (r: AdminRequest) => PENDING.includes(r.status)
 
 export const DEFAULT_TIMESHEET_CONFIG: Omit<TimesheetConfig, 'by' | 'at'> = {
-  version: 1, from: '2000-01-01', dutyNetMinutes: 8 * 60, minBreakMinutes: 30, editDays: 7, reason: 'قاعده‌ی اولیه: ۸ ساعت کار خالص و ۳۰ دقیقه استراحت و ناهار',
+  version: 1, from: '2000-01-01', dutyNetMinutes: 8 * 60, minBreakMinutes: 30, editDays: 7, reason: "Basic rule: 8 hours of pure work and 30 minutes of rest and lunch",
 }
 /** limits that keep obviously wrong entries out */
 export const MAX_PRESENCE = 20 * 60
@@ -103,7 +104,7 @@ export function computeDay(day: Pick<TimesheetDay, 'date' | 'checkIn' | 'checkOu
 export const sameCalc = (a: TimesheetCalc, b: TimesheetCalc) => (Object.keys(a) as (keyof TimesheetCalc)[]).every((k) => a[k] === b[k])
 
 export type OtState = 'none' | 'undecided' | 'pending' | 'approved' | 'partial' | 'rejected' | 'unpaid'
-export const OT_FA: Record<OtState, string> = { none: '', undecided: 'بدون تعیین تکلیف', pending: 'در انتظار بررسی', approved: 'تأییدشده', partial: 'بخشی تأیید شد', rejected: 'ردشده', unpaid: 'بدون پرداخت' }
+export const OT_FA: Record<OtState, string> = { none: '', undecided: "No assignment", pending: "Pending Review", approved: "Approved", partial: "Part Confirmed", rejected: "Rejected", unpaid: "No payment" }
 export function otState(c: TimesheetCalc, reqs: AdminRequest[] = []): OtState {
   if (!c.excess) return 'none'
   if (c.undecided) return 'undecided'
@@ -157,43 +158,43 @@ export function settleDays(inp: SettleInput) {
 // ---------- validation shared by the guard and the forms ----------
 export interface LeaveCheck { holidays: Set<string>; today: string; cfg: TimesheetConfig; closes: MonthClose[]; existing: Leave[]; pending: AdminRequest[]; userId: string }
 export function checkLeave(l: LeaveDetails | undefined, c: LeaveCheck): string | null {
-  if (!l || !['day', 'hour'].includes(l.mode)) return 'نوع مرخصی را مشخص کنید.'
-  if (!(l.category in LEAVE_CAT_FA)) return 'دسته‌ی مرخصی را انتخاب کنید.'
-  if (!l.from || !l.to) return 'تاریخ مرخصی را انتخاب کنید.'
-  if (l.to < l.from) return 'پایان مرخصی نمی‌تواند پیش از شروع آن باشد.'
-  if (l.mode === 'day' && rangeDays(l.from, l.to).length > MAX_LEAVE_SPAN) return `بازه‌ی مرخصی حداکثر ${MAX_LEAVE_SPAN} روز است.`
+  if (!l || !['day', 'hour'].includes(l.mode)) return "Identify the type of vacation."
+  if (!(l.category in LEAVE_CAT_FA)) return "Choose the vacation category."
+  if (!l.from || !l.to) return "Choose the date of vacation."
+  if (l.to < l.from) return "The end of the vacation cannot be before it begins."
+  if (l.mode === 'day' && rangeDays(l.from, l.to).length > MAX_LEAVE_SPAN) return `The maximum day off is ${MAX_LEAVE_SPAN}.`
   const dates = leaveDates(l, c.holidays)
   if (l.mode === 'hour') {
-    if (l.from !== l.to) return 'مرخصی ساعتی برای یک روز است.'
-    if (isOffDay(l.from, c.holidays)) return 'این روز تعطیل است؛ مرخصی لازم ندارد.'
+    if (l.from !== l.to) return "It’s a one-day vacation."
+    if (isOffDay(l.from, c.holidays)) return "This is a holiday; no vacation is required."
     const m = hourLeaveMinutes(l)
-    if (!m) return 'ساعت شروع و پایان مرخصی ساعتی را درست وارد کنید.'
-    if (m >= c.cfg.dutyNetMinutes) return 'مرخصی ساعتی باید کوتاه‌تر از یک روز کاری باشد؛ مرخصی روزانه ثبت کنید.'
+    if (!m) return "Enter the start and end of the time break."
+    if (m >= c.cfg.dutyNetMinutes) return "Day leave should be shorter than a working day; take a day off."
   }
-  if (!dates.length) return 'در این بازه روز کاری نیست.'
-  if (dates.some((d) => isMonthClosed(c.closes, d))) return 'ماه این تاریخ بسته شده است.'
+  if (!dates.length) return "There is no work day at this time."
+  if (dates.some((d) => isMonthClosed(c.closes, d))) return "The month of this date is closed."
   const taken = new Set(c.existing.filter((x) => x.userId === c.userId).map((x) => x.date))
   for (const r of c.pending) if (r.userId === c.userId && r.kind === 'leave' && r.leave && isPending(r)) for (const d of leaveDates(r.leave, c.holidays)) taken.add(d)
   const clash = dates.find((d) => taken.has(d))
-  if (clash) return 'برای بخشی از این روزها مرخصی ثبت‌شده یا در جریان دارید.'
+  if (clash) return "Some of these days you have a registered or ongoing vacation."
   return null
 }
 
 export interface OvertimeCheck { today: string; closes: MonthClose[]; day?: TimesheetDay; requests: AdminRequest[] }
 /** Overtime after the day is capped by what the timesheet shows; an advance request (day not finished yet) by MAX_ADVANCE_OT */
 export function checkOvertime(o: { date?: string; minutes?: number } | undefined, c: OvertimeCheck): string | null {
-  if (!o?.date) return 'تاریخ اضافه‌کاری را انتخاب کنید.'
-  if (!Number.isInteger(o.minutes) || (o.minutes ?? 0) <= 0) return 'مقدار اضافه‌کاری را وارد کنید.'
-  if (isMonthClosed(c.closes, o.date)) return 'ماه این تاریخ بسته شده است.'
+  if (!o?.date) return "Choose an overtime date."
+  if (!Number.isInteger(o.minutes) || (o.minutes ?? 0) <= 0) return "Enter the extra amount of work."
+  if (isMonthClosed(c.closes, o.date)) return "The month of this date is closed."
   const finished = !!c.day?.checkOut
   if (finished) {
     const free = overtimeAvailable(c.day!.calc, c.requests)
-    if (!free) return 'برای این روز اضافه‌کاری درخواست‌نشده‌ای نمانده است.'
-    if (o.minutes! > free) return `حداکثر اضافه‌کاری قابل درخواست این روز ${hm(free)} است.`
+    if (!free) return "No extra work is required for this day."
+    if (o.minutes! > free) return `The maximum possible overtime of this day is ${hm(free)}.`
     return null
   }
-  if (o.date < c.today) return 'برای روزهای گذشته، اول ساعت ورود و خروج را در تایم‌شیت ثبت کنید.'
-  if (o.minutes! > MAX_ADVANCE_OT) return `اضافه‌کاری از پیش حداکثر ${hm(MAX_ADVANCE_OT)} ساعت است.`
+  if (o.date < c.today) return "For the past few days, register the first hour of arrival and departure in Time Sheet."
+  if (o.minutes! > MAX_ADVANCE_OT) return `Overtime requested in advance is limited to ${hm(MAX_ADVANCE_OT)} hours.`
   return null
 }
 
@@ -226,7 +227,7 @@ export function overtimeSummary(days: TimesheetDay[]): OtRow[] {
   return [...m.values()].sort((a, b) => b.excess - a.excess)
 }
 export function statusCounts(reqs: AdminRequest[]) {
-  const c: Record<AdminRequestStatus, number> = { pending_office: 0, pending_ceo: 0, approved: 0, rejected: 0, withdrawn: 0, cancelled: 0 }
+  const c: Record<AdminRequestStatus, number> = { pending_it: 0, it_in_progress: 0, it_resolved: 0, pending_office: 0, pending_ceo: 0, approved: 0, rejected: 0, withdrawn: 0, cancelled: 0 }
   for (const r of reqs) c[r.status]++
   return c
 }

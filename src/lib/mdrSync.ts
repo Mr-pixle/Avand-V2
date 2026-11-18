@@ -18,7 +18,7 @@ import type { FieldChange, MdrRefresh, SyncItem, Task, TaskKind } from './types'
 export type MdrLevel = 'phase' | 'stage' | 'group' | 'doctype' | 'document'
 const LEVEL_KIND: Record<MdrLevel, TaskKind> = { phase: 'phase', stage: 'stage', group: 'group', doctype: 'doctype', document: 'document' }
 const DEPTH: Record<MdrLevel, number> = { phase: 0, stage: 1, group: 2, doctype: 3, document: 4 }
-export const LEVEL_FA: Record<MdrLevel, string> = { phase: 'Phase', stage: 'Stage', group: 'summary', doctype: 'Docs', document: 'سند' }
+export const LEVEL_FA: Record<MdrLevel, string> = { phase: 'Phase', stage: 'Stage', group: 'summary', doctype: 'Docs', document: "The Document" }
 
 /** Header names (normalised) of the columns the Sync reads or writes */
 export const MDR_HEADERS = {
@@ -86,11 +86,11 @@ const isError = (s: string) => /^#(N\/A|DIV\/0!|REF!|VALUE!|NAME\?|NUM!|NULL!|ER
 export function parseWeight(raw: string): { value: number | null; error?: string } {
   const s = latinDigits(raw).replace(/٫/g, '.').trim()
   if (!s) return { value: null }
-  if (isError(s)) return { value: null, error: `Weight خطای فرمول دارد (${s})` }
+  if (isError(s)) return { value: null, error: `Weight has a formula error ${s}` }
   const m = /^(-?\d+(?:\.\d+)?)\s*%?$/.exec(s.replace(/,/g, ''))
-  if (!m) return { value: null, error: `Weight عدد نیست («${s}»)` }
+  if (!m) return { value: null, error: `Weight is not a number (“${s}”)` }
   const v = Number(m[1])
-  if (v < 0) return { value: null, error: `Weight منفی است (${s})` }
+  if (v < 0) return { value: null, error: `Weight is negative (${s})` }
   return { value: Math.round(v * 10000) / 10000 }
 }
 
@@ -155,10 +155,10 @@ const LEVELS: [MdrLevel, MdrColumn][] = [['document', 'docNumber'], ['doctype', 
  */
 export function parseMdr(values: string[][]): MdrSheet {
   const head = findHeader(values)
-  if (!head) throw new MdrError('سطر هدر MDR پیدا نشد: در ۱۵ سطر اول، سطری با «Document Number» و «Sheets Name» نیست.')
+  if (!head) throw new MdrError("There was no MDR header line: in the first 15 rows, there is no row with \"Document Number\" and \"Sheets Name\".")
   const { columns: c } = head
   const missing = REQUIRED.filter((k) => c[k] == null)
-  if (missing.length) throw new MdrError(`این ستون‌ها در سطر هدر MDR نیستند: ${missing.map((k) => MDR_HEADERS[k]).join('، ')}`)
+  if (missing.length) throw new MdrError(`These columns are not in the MDR header row: ${missing.map((k) => MDR_HEADERS[k]).join('، ')}`)
   const title = (values[0] ?? []).find((x, i) => i === c.sheet && x) ?? (values[0] ?? []).find((x) => String(x ?? '').trim()) ?? ''
   const buildingType = cell(values[0], c.pkg) || ''
   const warnings: string[] = []
@@ -185,32 +185,32 @@ export function parseMdr(values: string[][]): MdrSheet {
     let level: MdrLevel = filled.length ? filled[0][0] : 'document'
     if (filled.length > 1) {
       const extra = filled.slice(1).map(([l]) => LEVEL_FA[l])
-      w.push(`در یک سطر چند ستون سطح پر است (${[LEVEL_FA[level], ...extra].join('، ')})؛ «${LEVEL_FA[level]}» در نظر گرفته شد.`)
+      w.push(`In a row, several columns of surface are filled ${[LEVEL_FA[level], ...extra].join('، ')} ; ${LEVEL_FA[level]} was considered.`)
     }
     const docNumber = cell(v, c.docNumber)
-    if (level === 'document' && !docNumber) w.push('سند بدون Document Number است؛ Status آن به MDR نوشته نمی‌شود.')
+    if (level === 'document' && !docNumber) w.push("The document is without a document number; its status is not written to the MDR.")
     const name = level === 'document' ? sheetName || docNumber
       : cell(v, c[level === 'doctype' ? 'docs' : level === 'group' ? 'summary' : level])
-    if (level === 'document' && !sheetName) w.push('«Sheets Name» خالی است؛ Document Number به‌جای نام گذاشته شد.')
+    if (level === 'document' && !sheetName) w.push("“Sheets Name” is empty; document number was named instead.")
     // parent by position
     const depth = DEPTH[level]
     let parent: MdrRow | undefined
     for (let d = depth - 1; d >= 0; d--) if (stack[d]) { parent = stack[d]; break }
-    if (depth > 0 && !parent) w.push(`این ${LEVEL_FA[level]} زیر هیچ ردیف بالادستی نیست.`)
-    else if (parent && DEPTH[parent.level] !== depth - 1) w.push(`ردیف ${LEVEL_FA[(Object.keys(DEPTH) as MdrLevel[])[depth - 1]]} بالای این سطر نیست؛ زیر «${parent.name}» گذاشته شد.`)
+    if (depth > 0 && !parent) w.push(`This ${LEVEL_FA[level]} is not under any upper row.`)
+    else if (parent && DEPTH[parent.level] !== depth - 1) w.push(`The row ${LEVEL_FA[(Object.keys(DEPTH) as MdrLevel[])[depth - 1]]} is not above this row; it was placed below the ${parent.name}.`)
     // Parent 4..1 columns: checked against the position
     const ancestors = stack.slice(0, depth)
     const pcols: MdrColumn[] = ['parent4', 'parent3', 'parent2', 'parent1']
     for (let d = 0; d < depth; d++) {
       const declared = cell(v, c[pcols[d]])
       const actual = ancestors[d]
-      if (declared && actual && norm(declared) !== norm(actual.name)) w.push(`ستون ${MDR_HEADERS[pcols[d]].replace('parent', 'Parent')} «${declared}» با ردیف بالادست «${actual.name}» یکی نیست؛ جایگاه سطر ملاک است.`)
+      if (declared && actual && norm(declared) !== norm(actual.name)) w.push(`${MDR_HEADERS[pcols[d]].replace('parent', 'Parent')} The column ${declared} is not one with the upper row ${actual.name} ; the position of the row is the criterion.`)
     }
     const wr = parseWeight(cell(v, c.weight))
     if (wr.error) w.push(wr.error)
     const planRaw = cell(v, c.planIssue)
     const planIssue = planRaw ? parseJalali(planRaw) : undefined
-    if (planRaw && !planIssue) w.push(`Plan Issue Date «${planRaw}» تاریخ شمسی معتبر نیست.`)
+    if (planRaw && !planIssue) w.push(`The Plan Issue Date ${planRaw} is not a valid solar date.`)
     const split = (s: string) => s.split(/[,،]/).map((x) => x.trim()).filter(Boolean)
     const subtasks = [...new Set([...split(cell(v, c.subDesign)), ...split(cell(v, c.subRender))])]
     const floor = cell(v, c.floor)
@@ -225,7 +225,7 @@ export function parseMdr(values: string[][]): MdrSheet {
     stack[depth] = row
     stack.length = depth + 1
   }
-  if (!rows.length) throw new MdrError('MDR هیچ سطر داده‌ای ندارد.')
+  if (!rows.length) throw new MdrError("MDR does not have any lines of data.")
   assignKeys(rows, warnings)
   applyWeights(rows)
   return { title: String(title).trim(), buildingType, headerRow: head.row + 1, columns: c, rows, warnings, rowsRead, lastDataRow }
@@ -253,11 +253,11 @@ function assignKeys(rows: MdrRow[], warnings: string[]) {
   const docCount = new Map<string, number>()
   for (const r of rows) if (r.docNumber) docCount.set(r.docNumber, (docCount.get(r.docNumber) ?? 0) + 1)
   const dupNumbers = [...docCount].filter(([, n]) => n > 1).map(([k]) => k)
-  if (dupNumbers.length) warnings.push(`${dupNumbers.length} Document Number در MDR تکراری است؛ برای این سطرها Document Number همراه نام سند شناسه است.`)
+  if (dupNumbers.length) warnings.push(`${dupNumbers.length} Document Number is duplicated in the MDR; for these lines, Document Number is associated with the ID document name.`)
   const unique = (base: string, r: MdrRow) => {
     let k = base, i = 2
     while (byKey.has(k)) k = `${base}~${i++}`
-    if (k !== base) r.warnings.push('این سطر با سطر دیگری هم‌شناسه بود (همان شماره و همان نام)؛ با شماره‌ی ردیف از هم جدا شدند.')
+    if (k !== base) r.warnings.push("This line was also identified by another row (the same number and the same name); separated by row number.")
     byKey.set(k, r)
     return k
   }
@@ -268,7 +268,7 @@ function assignKeys(rows: MdrRow[], warnings: string[]) {
     if (r.level === 'document') {
       if (r.docNumber) {
         const dup = (docCount.get(r.docNumber) ?? 0) > 1
-        if (dup) r.warnings.push(`Document Number «${r.docNumber}» در MDR تکراری است؛ این سطر با نامش («${r.name}») شناخته می‌شود.`)
+        if (dup) r.warnings.push(`Document Number ${r.docNumber} is duplicated in the MDR; this line is known by its name (“ ${r.name} ”).`)
         r.key = unique(dup ? `${r.docNumber}|${norm(r.name)}` : r.docNumber, r)
       } else r.key = unique(`${pk}/doc:${norm(r.name)}`, r)
     } else if (r.level === 'phase' || r.level === 'stage') {
@@ -303,7 +303,7 @@ function applyWeights(rows: MdrRow[]) {
       const share = Math.round(((parent?.w ?? 100) / list.length) * 10000) / 10000
       for (const r of list) {
         r.w = share; r.derived = true
-        if (set) r.warnings.push(`Weight فقط برای ${set} از ${list.length} ردیف هم‌سطح پر شده است؛ وزن ردیف بالادست میان همه به تساوی تقسیم شد.`)
+        if (set) r.warnings.push(`Weights are set for only ${set} of ${list.length} sibling rows. The parent weight was split evenly.`)
       }
     }
     for (const r of list) visit(r.key)
@@ -377,7 +377,7 @@ export function diffMdr(input: DiffInput): DiffResult {
         ...(r.planIssue ? { planIssue: r.planIssue } : {}), ...(r.subtasks.length ? { mdrSubtasks: r.subtasks } : {}),
         ...(r.level === 'document' ? { statusId: input.todoStatusId } : {}),
       }
-      push({ kind: 'new', branch, row: r.row, task, warnings: [...(t?.removedFromMdr ? ['این سطر دوباره در MDR آمده است؛ با تأیید، همان تسک قبلی (با سابقه‌اش) برمی‌گردد.'] : []), ...r.warnings] })
+      push({ kind: 'new', branch, row: r.row, task, warnings: [...(t?.removedFromMdr ? ["This line comes back in the MDR; with confirmation, the same previous task (with its record) will come back."] : []), ...r.warnings] })
       continue
     }
     const changes: FieldChange[] = []

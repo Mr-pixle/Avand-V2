@@ -1,6 +1,6 @@
-// Personal timeline: time runs right to left like the project Gantt; bars can be dragged to move a task or resize its dates.
+// Personal timeline: time runs left to right like the project Gantt; bars can be dragged to move a task or resize its dates.
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
-import { AlertTriangle, Check, ChevronDown, ChevronLeft, Crosshair } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Crosshair } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useFmt, useStore } from '@/lib/store'
@@ -50,7 +50,7 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
     const el = box.current, t = todayRef.current
     if (!el || !t) return
     const r = el.getBoundingClientRect(), tr = t.getBoundingClientRect()
-    el.scrollBy({ left: tr.left - (r.left + (r.width - nameW) * 0.6) })
+    el.scrollBy({ left: tr.left - (r.left + nameW + (r.width - nameW) * 0.5) })
   }
   useEffect(() => { toToday() }, [scale, nameW]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -61,7 +61,7 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setDrag({ id, mode, x0: e.clientX, delta: 0 })
   }
-  const moveDrag = (e: RPointerEvent) => { if (drag) setDrag({ ...drag, delta: Math.round(-(e.clientX - drag.x0) / px) }) }
+  const moveDrag = (e: RPointerEvent) => { if (drag) setDrag({ ...drag, delta: Math.round((e.clientX - drag.x0) / px) }) }
   const endDrag = () => {
     if (!drag) return
     const t = list.find((x) => x.id === drag.id)
@@ -71,9 +71,9 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
     if (!delta) { onOpen(id); return }
     const span = spanOf(t, drag)
     if (!span) return
-    if (span.start > span.end) { toast.error('موعد نمی‌تواند پیش از شروع باشد.'); return }
+    if (span.start > span.end) { toast.error("The time cannot be before the start."); return }
     dispatch({ type: 'ptUpdate', id, patch: t.start ? { start: span.start, due: span.end } : { due: span.end } })
-    toast.success(`${t.title}: ${d(span.start)} تا ${d(span.end)}`)
+    toast.success(`${t.title}: ${d(span.start)} Up to ${d(span.end)}`)
   }
   const spanOf = (t: PersonalTask, dr?: Drag | null) => {
     const s0 = t.start ?? t.due, e0 = t.due ?? t.start
@@ -86,9 +86,9 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
   const setOnClick = (e: React.MouseEvent<HTMLDivElement>, t: PersonalTask) => {
     // unscheduled row: click a day to put the task there
     const r = e.currentTarget.getBoundingClientRect()
-    const date = addDays(origin, Math.floor((r.right - e.clientX) / px))
+    const date = addDays(origin, Math.floor((e.clientX - r.left) / px))
     dispatch({ type: 'ptUpdate', id: t.id, patch: { start: date, due: date } })
-    toast.success(`«${t.title}» در ${d(date)} گذاشته شد؛ برای تغییر، نوار را بکشید.`)
+    toast.success(`${t.title} It was put in ${d(date)} ; to change, drag the tape.`)
   }
 
   const months: { start: string; label: string }[] = []
@@ -98,21 +98,21 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
     let n = m; while (n <= last && toJalali(n).jm === j.jm) n = addDays(n, 1)
     m = n
   }
-  const weekendBg = `repeating-linear-gradient(to left, transparent 0 ${5 * px}px, hsl(var(--foreground) / ${scale === 'day' ? 0.05 : 0.03}) ${5 * px}px ${7 * px}px)`
+  const weekendBg = `repeating-linear-gradient(to right, transparent 0 ${5 * px}px, hsl(var(--foreground) / ${scale === 'day' ? 0.05 : 0.03}) ${5 * px}px ${7 * px}px)`
   const unscheduled = rows.filter((r) => !r.t.start && !r.t.due).length
 
-  if (!rows.length) return <p className="py-8 text-center text-[13px] text-muted-foreground">کاری برای نمایش نیست.</p>
+  if (!rows.length) return <p className="py-8 text-center text-[13px] text-muted-foreground">There is nothing to show.</p>
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented size="sm" value={scale} onChange={setScale} options={[{ value: 'day', label: 'روز' }, { value: 'week', label: 'هفته' }]} />
-        <button type="button" onClick={toToday} className="key key-surface inline-flex h-8 items-center gap-1 rounded-full px-3 text-[12px]"><Crosshair className="h-3.5 w-3.5" /> امروز</button>
-        <span className="text-[11.5px] text-muted-foreground">نوار را بکشید تا جابه‌جا شود؛ لبه‌ها را بکشید تا شروع یا موعد تغییر کند.{unscheduled ? ` برای کار بدون تاریخ، روی روز موردنظر در ردیفش بزنید.` : ''}</span>
+        <Segmented size="sm" value={scale} onChange={setScale} options={[{ value: 'day', label: 'Days' }, { value: 'week', label: 'Week' }]} />
+        <button type="button" onClick={toToday} className="key key-surface inline-flex h-8 items-center gap-1 rounded-full px-3 text-[12px]"><Crosshair className="h-3.5 w-3.5" /> Today</button>
+        <span className="text-[11.5px] text-muted-foreground">Pull the tape to move; pull the edges to start or change the time.{unscheduled ? " To work without a date, put it in the row on the day." : ''}</span>
       </div>
-      <div ref={box} className="thin-scroll relative w-full overflow-auto rounded-xl border bg-glass-solid" style={{ maxHeight: 620 }} role="grid" aria-label="Timeline کارهای شخصی" aria-rowcount={rows.length}>
+      <div ref={box} className="thin-scroll relative w-full overflow-auto rounded-xl border bg-glass-solid" style={{ maxHeight: 620 }} role="grid" aria-label="Timeline of personal work" aria-rowcount={rows.length}>
         <div className="relative" style={{ width: nameW + timeW }}>
           <div className="sticky top-0 z-30 flex border-b bg-glass-solid" style={{ height: HEAD }}>
-            <div className="sticky start-0 z-40 flex items-end border-e bg-glass-solid px-3 pb-1.5 text-[11.5px] font-medium text-muted-foreground" style={{ width: nameW }}>کار</div>
+            <div className="sticky start-0 z-40 flex items-end border-e bg-glass-solid px-3 pb-1.5 text-[11.5px] font-medium text-muted-foreground" style={{ width: nameW }}>Workspace</div>
             <div className="relative" style={{ width: timeW }}>
               {months.map((m, i) => (
                 <div key={m.start} className="absolute top-0 flex h-[22px] items-center overflow-hidden border-s px-1.5 text-[11px] font-medium" style={{ insetInlineStart: off(m.start), width: diffDays(months[i + 1]?.start ?? addDays(last, 1), m.start) * px }}><span className="num truncate">{m.label}</span></div>
@@ -144,18 +144,18 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
                 <div key={t.id} role="row" aria-rowindex={i + 1} className="group absolute flex hover:bg-foreground/[0.03]" style={{ top: i * ROW, height: ROW, width: nameW + timeW }}>
                   <div className="sticky start-0 z-20 flex items-center gap-1 border-e bg-glass-solid pe-2 text-[12.5px]" style={{ width: nameW, paddingInlineStart: 6 + level * 14 }}>
                     {hasKids ? (
-                      <button type="button" className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => setClosed({ ...closed, [t.id]: !closed[t.id] })} aria-expanded={!closed[t.id]} aria-label={closed[t.id] ? 'باز کردن' : 'بستن'}>
-                        {closed[t.id] ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      <button type="button" className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => setClosed({ ...closed, [t.id]: !closed[t.id] })} aria-expanded={!closed[t.id]} aria-label={closed[t.id] ? "Open" : 'Close'}>
+                        {closed[t.id] ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                       </button>
                     ) : <span className="w-[18px] shrink-0" />}
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} title={s.name} />
                     <button type="button" className={cn('min-w-0 truncate text-start hover:text-azure', hasKids && 'font-semibold', s.done && 'text-muted-foreground line-through')} onClick={() => onOpen(t.id)} title={t.title}>{t.title}</button>
-                    {!span && <span className="ms-auto shrink-0 rounded bg-secondary px-1 text-[10px] text-muted-foreground">بدون تاریخ</span>}
+                    {!span && <span className="ms-auto shrink-0 rounded bg-secondary px-1 text-[10px] text-muted-foreground">No date</span>}
                   </div>
                   <div className={cn('relative', !span && 'cursor-copy')} style={{ width: timeW }} onClick={!span ? (e) => setOnClick(e, t) : undefined}>
-                    {kidsSpan && <div className="absolute top-[29px] h-[3px] rounded-full bg-foreground/25" style={{ insetInlineStart: off(kidsSpan.start), width: (diffDays(kidsSpan.end, kidsSpan.start) + 1) * px }} title="بازه‌ی Subtaskها" />}
+                    {kidsSpan && <div className="absolute top-[29px] h-[3px] rounded-full bg-foreground/25" style={{ insetInlineStart: off(kidsSpan.start), width: (diffDays(kidsSpan.end, kidsSpan.start) + 1) * px }} title="Subtasks" />}
                     {span && !milestone && (
-                      <div data-pbar={t.id} role="button" tabIndex={0} aria-label={`${t.title}: ${d(span.start)} تا ${d(span.end)}`}
+                      <div data-pbar={t.id} role="button" tabIndex={0} aria-label={`${t.title}: ${d(span.start)} Up to ${d(span.end)}`}
                         onPointerDown={(e) => startDrag(e, t.id, 'move')} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(t.id) }}
                         className={cn('absolute top-[7px] flex h-[20px] cursor-grab touch-none select-none items-center overflow-hidden rounded-[6px] border px-1.5 text-[11px] active:cursor-grabbing', drag?.id === t.id && 'ring-2 ring-azure', outside && 'border-dashed')}
                         style={{ insetInlineStart: off(span.start), width: Math.max(px, (diffDays(span.end, span.start) + 1) * px), background: `color-mix(in srgb, ${s.color} ${s.done ? 18 : 32}%, transparent)`, borderColor: overdue ? 'var(--status-critical)' : s.color }}>
@@ -166,10 +166,10 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
                       </div>
                     )}
                     {span && milestone && (
-                      <div data-pbar={t.id} role="button" tabIndex={0} aria-label={`${t.title}: موعد ${d(span.end)}`} onPointerDown={(e) => startDrag(e, t.id, 'end')}
+                      <div data-pbar={t.id} role="button" tabIndex={0} aria-label={`${t.title}: Timed ${d(span.end)}`} onPointerDown={(e) => startDrag(e, t.id, 'end')}
                         className="absolute top-[11px] h-[12px] w-[12px] rotate-45 cursor-grab touch-none rounded-[2px]" style={{ insetInlineStart: off(span.end) + px / 2 - 6, background: overdue ? 'var(--status-critical)' : s.color }} />
                     )}
-                    {outside && span && <AlertTriangle className="absolute top-[10px] h-3.5 w-3.5 text-[var(--status-warning)]" style={{ insetInlineStart: off(span.end) + (diffDays(span.end, span.start) + 1) * px + 4 }} aria-label="خارج از بازه‌ی Task اصلی" />}
+                    {outside && span && <AlertTriangle className="absolute top-[10px] h-3.5 w-3.5 text-[var(--status-warning)]" style={{ insetInlineStart: off(span.end) + (diffDays(span.end, span.start) + 1) * px + 4 }} aria-label="Outside the main task range" />}
                     {drag?.id === t.id && span && <span className="num pointer-events-none absolute -top-0.5 z-10 rounded bg-foreground px-1.5 text-[10.5px] text-background" style={{ insetInlineStart: off(span.start) }}>{d(span.start)} – {d(span.end)}</span>}
                   </div>
                 </div>
@@ -178,12 +178,12 @@ export function PersonalTimeline({ tasks, onOpen }: { tasks: PersonalTask[]; onO
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted-foreground" aria-label="راهنما">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-6 rounded border" style={{ background: 'color-mix(in srgb, #1b57d5 32%, transparent)', borderColor: '#1b57d5' }} />شروع تا موعد (رنگ = Status)</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-foreground/60" />فقط موعد</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-[3px] w-6 rounded-full bg-foreground/25" />بازه‌ی Subtaskها</span>
-        <span className="inline-flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 text-[var(--status-warning)]" />Subtask بیرون از بازه‌ی Task اصلی</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-[2px]" style={{ background: 'var(--chart-pos)' }} />امروز</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted-foreground" aria-label="Guides">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-6 rounded border" style={{ background: 'color-mix(in srgb, #1b57d5 32%, transparent)', borderColor: '#1b57d5' }} />Start until the date (color = status)</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 bg-foreground/60" />Just time</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-[3px] w-6 rounded-full bg-foreground/25" />Subtasks</span>
+        <span className="inline-flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 text-[var(--status-warning)]" />Subtask outside the main task range</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-[2px]" style={{ background: 'var(--chart-pos)' }} />Today</span>
       </div>
     </div>
   )

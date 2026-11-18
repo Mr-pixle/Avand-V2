@@ -20,9 +20,9 @@ export interface JobOptions {
 }
 
 type Log = SyncRun['log']
-const isNote = (w: string) => w.startsWith('Weight فقط برای')
+const isNote = (w: string) => w.startsWith('Weights are set for only') || w.startsWith('Weight فقط برای')
 const tehranHour = (d = new Date()) => Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tehran', hour: '2-digit', hour12: false }).format(d)) % 24
-const errText = (e: unknown) => (e instanceof SheetsError || e instanceof MdrError ? e.message : `خطای داخلی: ${(e as Error)?.message ?? e}`)
+const errText = (e: unknown) => (e instanceof SheetsError || e instanceof MdrError ? e.message : `Internal Error: ${(e as Error)?.message ?? e}`)
 
 export class Jobs {
   private wbTimer: NodeJS.Timeout | null = null
@@ -87,7 +87,7 @@ export class Jobs {
     if (this.syncing.has(projectId)) return this.core.state.syncRuns.find((r) => r.projectId === projectId && r.state === 'running') ?? this.core.state.syncRuns[0]
     this.syncing.add(projectId)
     const started = Date.now()
-    const run: SyncRun = { id: this.id('run'), projectId, trigger, at: new Date().toISOString(), durationSec: 0, state: 'running', rowsRead: 0, diffs: { new: 0, changed: 0, removed: 0 }, cellsWritten: 0, log: [{ level: 'info', text: `خواندن MDR (Tab «${p.mdrTab}») از Google Sheets…` }] }
+    const run: SyncRun = { id: this.id('run'), projectId, trigger, at: new Date().toISOString(), durationSec: 0, state: 'running', rowsRead: 0, diffs: { new: 0, changed: 0, removed: 0 }, cellsWritten: 0, log: [{ level: 'info', text: `Read MDR (tab " ${p.mdrTab} ") from Google Sheets...` }] }
     try {
       await this.core.dispatch(null, { type: 'sysRunStart', run })
       let values: string[][] | null = null
@@ -100,7 +100,7 @@ export class Jobs {
         if (failure || !values) {
           next = reducer({ ...state, session: null }, {
             type: 'sysSyncResult', projectId, runId: run.id, at: new Date().toISOString(), replacePending: false, items: [], refresh: [], by,
-            run: { state: 'failed', durationSec: dur(), log: [...run.log, { level: 'error', text: failure ?? 'MDR خوانده نشد.' }] },
+            run: { state: 'failed', durationSec: dur(), log: [...run.log, { level: 'error', text: failure ?? "MDR is not read." }] },
           })
         } else {
           let sheet
@@ -114,19 +114,19 @@ export class Jobs {
           }
           let i = 0
           const d = diffMdr({ projectId, tasks: state.tasks, sheet, runId: run.id, todoStatusId: todoStatusFor(state, projectId), previous: state.syncItems.filter((x) => x.projectId === projectId), newItemId: () => `${run.id}-${i++}` })
-          const problems = sheet.rows.flatMap((r) => r.warnings.filter((w) => !isNote(w)).map((w) => `ردیف ${r.row}: ${w}`))
+          const problems = sheet.rows.flatMap((r) => r.warnings.filter((w) => !isNote(w)).map((w) => `Row ${r.row}: ${w}`))
           const split = new Set(sheet.rows.filter((r) => r.warnings.some(isNote)).map((r) => r.parentKey)).size
           const c = sheet.columns
           const log: Log = [
-            { level: 'info', text: `${sheet.rowsRead} سطر داده از Tab «${p.mdrTab}» خوانده شد (ردیف ${sheet.headerRow + 1} تا ${sheet.lastDataRow})${sheet.title ? `؛ پروژه‌ی MDR: ${sheet.title}` : ''}.` },
-            { level: 'info', text: `ستون‌ها با نام هدر سطر ${sheet.headerRow} پیدا شدند؛ Write-back فقط در ستون‌های ${colLetter(c.lastDate!)}، ${colLetter(c.lastStatus!)} و ${colLetter(c.progress!)} (internal).` },
+            { level: 'info', text: `${sheet.rowsRead} The line of data was read from Tab " ${p.mdrTab} " (row ${sheet.headerRow + 1} to ${sheet.lastDataRow}) ${sheet.title ? `Project MDR: ${sheet.title}` : ''}.` },
+            { level: 'info', text: `The columns were found in the header row ${sheet.headerRow} ; writing-back was only found in columns ${colLetter(c.lastDate!)}, ${colLetter(c.lastStatus!)} and ${colLetter(c.progress!)} (inner).` },
             ...sheet.warnings.map((w) => ({ level: 'warn' as const, text: w })),
             ...problems.slice(0, 40).map((w) => ({ level: 'warn' as const, text: w })),
-            ...(problems.length > 40 ? [{ level: 'warn' as const, text: `و ${problems.length - 40} هشدار سطری دیگر (در خود ردیف‌های Sync Review).` }] : []),
-            ...(split ? [{ level: 'info' as const, text: `${split} گروه هم‌سطح Weight کامل نداشتند؛ وزن ردیف بالادست میانشان به تساوی تقسیم شد.` }] : []),
-            { level: 'info', text: `${d.items.filter((x) => x.kind === 'new').length} جدید، ${d.items.filter((x) => x.kind === 'changed').length} تغییر و ${d.items.filter((x) => x.kind === 'removed').length} حذف به صف Sync Review رفت؛ ${d.unchanged} ردیف بدون تغییر.` },
-            ...(d.refresh.length ? [{ level: 'info' as const, text: `${d.refresh.length} تسک شماره‌ی ردیف، Plan Issue Date یا SubTask تازه گرفت (بدون نیاز به بررسی).` }] : []),
-            ...(d.skippedRejected ? [{ level: 'info' as const, text: `${d.skippedRejected} پیشنهاد که قبلاً رد شده بود و در MDR تغییری نکرده، دوباره پیشنهاد نشد.` }] : []),
+            ...(problems.length > 40 ? [{ level: 'warn' as const, text: `${problems.length - 40} Another row warning (in Sync Review rows).` }] : []),
+            ...(split ? [{ level: 'info' as const, text: `${split} The group did not have a complete weight level; the weight of the upper arm was divided into equal.` }] : []),
+            { level: 'info', text: `${d.items.filter((x) => x.kind === 'new').length} The new, ${d.items.filter((x) => x.kind === 'changed').length} change and ${d.items.filter((x) => x.kind === 'removed').length} deletion went to Sync Review queue; ${d.unchanged} row unchanged.` },
+            ...(d.refresh.length ? [{ level: 'info' as const, text: `${d.refresh.length} Task No. Row, Plan Issue Date, or Subtask got fresh (no need to check).` }] : []),
+            ...(d.skippedRejected ? [{ level: 'info' as const, text: `${d.skippedRejected} The proposal that had already been rejected and did not change in the MDR was not proposed again.` }] : []),
           ]
           const diffs = { new: d.items.filter((x) => x.kind === 'new').length, changed: d.items.filter((x) => x.kind === 'changed').length, removed: d.items.filter((x) => x.kind === 'removed').length }
           next = reducer({ ...state, session: null }, {
@@ -152,9 +152,9 @@ export class Jobs {
   }
 
   private async read(p: Project) {
-    if (!this.sheets) throw new SheetsError('حساب سرویس Google روی سرور تنظیم نشده است (GOOGLE_SERVICE_ACCOUNT_FILE).', 0)
+    if (!this.sheets) throw new SheetsError("The Google service account is not set up on the server (Google_Service_Account_File).", 0)
     const id = sheetIdOf(p.mdrUrl)
-    if (!id) throw new SheetsError('لینک MDR این پروژه لینک Google Sheet نیست.', 0)
+    if (!id) throw new SheetsError("The MDR link of this project is not the Google Sheet link.", 0)
     return this.sheets.getValues(id, a1Tab(p.mdrTab || 'MDR'))
   }
 
@@ -203,7 +203,7 @@ export class Jobs {
         if (!p || !sheetIdOf(p.mdrUrl)) {
           // nothing to write to: the queue would never empty, so these items are closed with a clear record
           run.state = 'failed'
-          run.log.push({ level: 'error', text: 'لینک MDR این پروژه ثبت نشده است؛ Status این سندها در MDR نوشته نشد.' }, { level: 'info', text: `${list.length} سند از صف Write-back خارج شد. پس از ثبت لینک MDR، تغییر بعدی Status نوشته می‌شود.` })
+          run.log.push({ level: 'error', text: "The MDR link is not registered; Status of these documents is not written in the MDR." }, { level: 'info', text: `${list.length} The document was removed from the Writing-back queue. After registering the MDR link, the next change is written Status.` })
           settled.push(...list)
           runs.push(run)
           continue
@@ -218,10 +218,10 @@ export class Jobs {
           const n2 = await this.sheets!.batchUpdate(id, 'USER_ENTERED', plan.entered)
           run.rowsRead = sheet.rowsRead
           run.cellsWritten = n1 + n2
-          run.log.push({ level: 'info', text: `${list.length} سند: ردیف هر سند پیش از نوشتن با Document Number از MDR دوباره پیدا شد.` })
-          for (const f of plan.found) run.log.push({ level: 'info', text: `${f.req.task.docNumber} ← ردیف ${f.row}: Last Status «${f.req.statusName}»، Progress ${Math.round(f.req.progress)}٪، Last Status Date ${jalaliCell(f.req.date)}` })
-          for (const m of plan.missing) run.log.push({ level: 'warn', text: `«${m.task.name}» (${m.task.docNumber}) در MDR پیدا نشد؛ Status آن نوشته نشد.` })
-          run.log.push({ level: 'info', text: `فقط ۳ ستون internal نوشته شد — ${run.cellsWritten} سلول. هیچ سلول دیگری تغییر نکرد.` })
+          run.log.push({ level: 'info', text: `${list.length} Document: The row of each document was rediscovered before writing with Document Number from MDR.` })
+          for (const f of plan.found) run.log.push({ level: 'info', text: `${f.req.task.docNumber} ← Row ${f.row}: Last Status « ${f.req.statusName} », Progress ${Math.round(f.req.progress)}%, Last Status Date ${jalaliCell(f.req.date)}` })
+          for (const m of plan.missing) run.log.push({ level: 'warn', text: `" ${m.task.name} " ${m.task.docNumber} was not found in MDR; its status was not written.` })
+          run.log.push({ level: 'info', text: `Only 3 internal columns were written — ${run.cellsWritten} cells. No other cells changed.` })
           run.state = plan.missing.length ? 'partial' : 'success'
           for (const f of plan.found) rows.push({ taskId: f.req.task.id, mdrRow: f.row })
           settled.push(...list)
@@ -232,7 +232,7 @@ export class Jobs {
           r.at = Date.now() + Math.min(60, 5 * 2 ** (r.n - 1)) * 60_000
           this.wbRetry.set(pid, r)
           run.state = 'failed'
-          run.log.push({ level: 'error', text: errText(e) }, { level: 'info', text: `${list.length} سند در صف ماند؛ ${Math.round((r.at - Date.now()) / 60_000)} دقیقه‌ی دیگر دوباره امتحان می‌شود.` })
+          run.log.push({ level: 'error', text: errText(e) }, { level: 'info', text: `${list.length} The document remained in line; ${Math.round((r.at - Date.now()) / 60_000)} another minute will be tried again.` })
           // a failure that keeps repeating is recorded once an hour, not on every retry
           if (r.n > 1 && r.n % 4 !== 0 && !force) { run.durationSec = -1 }
         }

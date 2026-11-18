@@ -3,19 +3,16 @@ import { DocumentsPage, LinksPage } from '@/pages/Library'
 import { useState } from 'react'
 import { DirectionProvider } from '@radix-ui/react-direction'
 import { Toaster } from 'sonner'
-import { Bell, ClipboardCheck, Clock3, ListTodo, FileBarChart2, FilePen, FolderKanban, Gauge, GitPullRequestArrow, History, House, Inbox, Landmark, Lock, MessagesSquare, Settings2, Trophy, UsersRound, Warehouse } from 'lucide-react'
+import { Bell, ClipboardCheck, Clock3, ListTodo, FileBarChart2, FilePen, FolderKanban, Gauge, GitPullRequestArrow, History, House, Inbox, Landmark, Lock, MessagesSquare, Settings, Settings2, Trophy, UsersRound, Warehouse } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { useLiquidDrop } from '@/lib/useLiquidDrop'
 import { StoreProvider, useFmt, useStore, type Page } from '@/lib/store'
-import { SERVER_MODE } from '@/lib/remote'
 import { finSpacesOf } from '@/lib/policy'
 import { Empty, Logo } from '@/components/common'
 import { TaskDrawer } from '@/components/TaskDrawer'
 import { ProfileDialog } from '@/components/Profile'
-import { TopBar } from '@/components/TopBar'
+import { ProfileMenu, TopBar } from '@/components/TopBar'
+import { SettingsPage } from '@/pages/Settings'
 import { Home } from '@/pages/Home'
 import { ProjectPage, Projects } from '@/pages/Projects'
 import { Workload } from '@/pages/Workload'
@@ -33,33 +30,33 @@ import { FinAdminPage } from '@/pages/FinAdmin'
 
 type NavItem = { page: Page; label: string; icon: typeof House; restricted?: boolean }
 const NAV: { group: string; items: NavItem[] }[] = [
-  { group: 'کار', items: [
-    { page: 'home', label: 'خانه', icon: House },
-    { page: 'notifications', label: 'اعلان‌ها', icon: Bell },
-    { page: 'projects', label: 'پروژه‌ها', icon: FolderKanban },
-    { page: 'supervision', label: 'نظارت و اجرا', icon: ClipboardCheck },
-    { page: 'team', label: 'فضای تیم', icon: Warehouse },
-    { page: 'documents', label: 'پوشه', icon: FolderKanban },
-    { page: 'links', label: 'پیوندها', icon: Warehouse },
-    { page: 'personal', label: 'کارهای شخصی', icon: ListTodo },
+  { group: 'Workspace', items: [
+    { page: 'home', label: 'Overview', icon: House },
+    { page: 'notifications', label: 'Notifications', icon: Bell },
+    { page: 'projects', label: 'Projects', icon: FolderKanban },
+    { page: 'supervision', label: 'Site Supervision', icon: ClipboardCheck },
+    { page: 'team', label: 'Team Spaces', icon: Warehouse },
+    { page: 'documents', label: 'Documents', icon: FolderKanban },
+    { page: 'links', label: 'Links', icon: Warehouse },
+    { page: 'personal', label: 'Personal Tasks', icon: ListTodo },
   ] },
-  { group: 'اداری', items: [
-    { page: 'requests', label: 'درخواست‌های من', icon: FilePen },
-    { page: 'timesheet', label: 'تایم‌شیت', icon: Clock3 },
-    { page: 'inbox', label: 'کارتابل', icon: Inbox, restricted: true },
-    { page: 'adminreports', label: 'گزارش‌های اداری', icon: FileBarChart2, restricted: true },
-    { page: 'finadmin', label: 'فضای مالی و اداری', icon: Landmark, restricted: true },
+  { group: 'Office', items: [
+    { page: 'requests', label: 'My Requests', icon: FilePen },
+    { page: 'timesheet', label: 'Timesheet', icon: Clock3 },
+    { page: 'inbox', label: 'Inbox', icon: Inbox, restricted: true },
+    { page: 'adminreports', label: 'Office Reports', icon: FileBarChart2, restricted: true },
+    { page: 'finadmin', label: 'Finance & Administration', icon: Landmark, restricted: true },
   ] },
-  { group: 'گفتگو', items: [
-    { page: 'pchat', label: 'چت پروژه', icon: MessagesSquare },
-    { page: 'chat', label: 'چت عمومی', icon: UsersRound },
+  { group: 'Chat', items: [
+    { page: 'pchat', label: 'Project Chat', icon: MessagesSquare },
+    { page: 'chat', label: 'General Chat', icon: UsersRound },
   ] },
-  { group: 'کنترل پروژه', items: [
+  { group: 'Project Controls', items: [
     { page: 'workload', label: 'Workload', icon: Gauge, restricted: true },
-    { page: 'review', label: 'صف Sync Review', icon: GitPullRequestArrow, restricted: true },
-    { page: 'runs', label: 'اجراهای Sync', icon: History, restricted: true },
-    { page: 'points', label: 'گزارش امتیازات', icon: Trophy, restricted: true },
-    { page: 'admin', label: 'مدیریت', icon: Settings2, restricted: true },
+    { page: 'review', label: 'Sync Review', icon: GitPullRequestArrow, restricted: true },
+    { page: 'runs', label: 'Sync History', icon: History, restricted: true },
+    { page: 'points', label: 'Points Report', icon: Trophy, restricted: true },
+    { page: 'admin', label: 'Administration', icon: Settings2, restricted: true },
   ] },
 ]
 
@@ -71,7 +68,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const current = state.nav.page === 'project' ? 'projects' : state.nav.page
   // CEO and Project Control land on the overview of all team spaces; everyone else on their own team
   const go = (page: Page) => dispatch({ type: 'nav', nav: page === 'team' && !can.perm('teamspace.all') ? { page, teamId: me.teamId } : { page } })
-  const drop = useLiquidDrop<HTMLElement>('y', '[data-drop-active="true"]')
   const badgeOf = (p: Page) => p === 'notifications' ? unread
     : p === 'review' ? pending
       : p === 'runs' ? state.writeQueue.length
@@ -80,43 +76,40 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             : p === 'chat' ? unreadIn('general') + unreadIn('announce')
               : p === 'supervision' ? Object.values(state.tasks).filter((t) => t.kind === 'supervision' && ((t.assigneeUserId === me.id && ['assigned', 'rework'].includes(t.flow ?? '')) || (t.reviewerId === me.id && t.flow === 'in_review'))).length
                 : p === 'team' ? Object.values(state.tasks).filter((t) => t.kind === 'internal' && ((t.assigneeUserId === me.id && ['assigned', 'rework'].includes(t.flow ?? '')) || (t.reviewerId === me.id && t.flow === 'in_review'))).length
-                  : p === 'inbox' ? state.adminRequests.filter((r) => can.decideRequest(r)).length
+                  : p === 'inbox' ? state.adminRequests.filter((r) => can.decideRequest(r) || can.handleItRequest(r)).length
                     : p === 'timesheet' ? Object.values(state.timesheets).filter((d) => d.userId === me.id && d.calc.undecided > 0).length
                       : p === 'finadmin' ? Object.values(state.tasks).filter((t) => t.kind === 'finadmin' && can.viewTask(t) && ((t.assigneeUserId === me.id && ['assigned', 'rework'].includes(t.flow ?? '')) || (t.reviewerId === me.id && t.flow === 'in_review'))).length : 0
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-4 pb-4 pt-5">
+      <div className="flex items-center gap-3 px-5 pb-5 pt-6">
         <Logo className="h-8 w-8 text-foreground" />
         <div className="leading-tight">
-          <div className="text-[18px] font-extrabold tracking-tight">آوند</div>
-          <div className="text-[11px] text-muted-foreground">سامانه‌ی کار و ظرفیت پرگار</div>
+          <div className="text-[18px] font-normal tracking-[0.28em]">PARGAR</div>
+          <div className="text-[11px] text-muted-foreground">Avand Workspace</div>
         </div>
       </div>
       {/* nav and projects scroll on short screens so the footer stays reachable */}
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pb-3">
-      <nav ref={drop.ref} className="relative flex flex-col gap-3 px-2" aria-label="ناوبری اصلی">
-        <span aria-hidden="true" className={cn('drop', !drop.animate && 'no-anim')} style={drop.style} />
+      <nav className="flex flex-col gap-4 px-3" aria-label="Main navigation">
         {NAV.map((g) => {
           const items = g.items.filter((x) => can.page(x.page))
           if (!items.length) return null
           return (
-            <div key={g.group} className="flex flex-col gap-0.5">
+            <div key={g.group} className="flex flex-col gap-1.5">
               <div className="eyebrow px-2.5 pb-0.5">{g.group}</div>
               {items.map((x) => {
                 const Icon = x.icon
                 const badge = badgeOf(x.page)
                 // the section is named after the spaces this person may open: both for the CEO, one for each manager
                 const fin = x.page === 'finadmin' ? finSpacesOf(me) : []
-                const label = x.page !== 'finadmin' || fin.length !== 1 ? x.label : fin[0] === 'finance' ? 'فضای مالی' : 'فضای اداری'
+                const label = x.page !== 'finadmin' || fin.length !== 1 ? x.label : fin[0] === 'finance' ? 'Finance' : 'Administration'
                 return (
                   <button key={x.page} onClick={() => { go(x.page); onNavigate?.() }}
                     aria-current={current === x.page ? 'page' : undefined}
-                    data-drop-active={current === x.page}
-                    className={cn('relative z-[1] flex items-center gap-2.5 rounded-full px-3 py-[7px] text-[13.5px] transition-[background-color,color,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 active:scale-[0.98]',
-                      current === x.page ? 'font-semibold text-foreground [&>svg]:text-azure' : 'text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground')}>
-                    <Icon className="h-4 w-4" />
+                    className="studio-nav-item">
+                    <Icon className="size-5" strokeWidth={1.5} />
                     <span className="flex-1 text-start">{label}</span>
-                    {badge > 0 && <span className="num rounded-full bg-azure px-1.5 text-[11px] font-semibold text-white shadow-[inset_0_1px_0_hsl(0_0%_100%/0.25)]">{n(badge)}</span>}
+                    {badge > 0 && <span className="num rounded-full bg-azure px-1.5 text-[11px] font-semibold text-azure-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.25)]">{n(badge)}</span>}
                   </button>
                 )
               })}
@@ -125,7 +118,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
       <div className="mt-5 px-4">
-        <div className="eyebrow mb-1.5">پروژه‌های من</div>
+        <div className="eyebrow mb-1.5">My Projects</div>
         <div className="flex flex-col">
           {myResponsibilityProjects(state, me.id).map((p) => (
             <button key={p.id} onClick={() => { dispatch({ type: 'nav', nav: { page: 'project', projectId: p.id } }); onNavigate?.() }}
@@ -136,14 +129,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
       </div>
-      <div className="glass-divider shrink-0 border-t px-4 py-4">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="fa-digits" className="text-[12.5px]">ارقام فارسی</Label>
-          <Switch id="fa-digits" checked={state.persianDigits} onCheckedChange={(v) => dispatch({ type: 'setDigits', on: v })} />
-        </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">{SERVER_MODE
-          ? 'همه‌ی تغییرها روی سرور آوند ثبت و برای همه‌ی همکاران هم‌زمان به‌روز می‌شود.'
-          : 'نسخه‌ی نمایشی با داده‌ی نمونه. تغییرات، پیام‌ها، پیوست‌ها و حساب‌ها فقط در همین صفحه می‌ماند و با بارگذاری دوباره به حالت اول برمی‌گردد.'}</p>
+      <div className="glass-divider shrink-0 space-y-2 border-t p-3">
+        <button aria-current={current === 'settings' ? 'page' : undefined} className="studio-nav-item w-full" onClick={() => { go('settings'); onNavigate?.() }}>
+          <Settings className="size-5" strokeWidth={1.5} /> Settings
+        </button>
+        <ProfileMenu sidebar onAction={onNavigate} />
       </div>
     </div>
   )
@@ -153,16 +143,17 @@ function Main() {
   const { state, can } = useStore()
   const p = state.nav.page
   if (!can.page(p)) {
-    if (p === 'requests' || p === 'timesheet') return <Empty title="این بخش برای مدیرعامل فعال نیست" />
-    if (p === 'inbox') return <Empty icon={<Lock className="h-6 w-6" />} title="کارتابل فقط برای مدیر اداری و مدیرعامل است" hint="درخواست‌های خودتان را از «درخواست‌های من» پیگیری کنید." />
-    if (p === 'adminreports') return <Empty icon={<Lock className="h-6 w-6" />} title="گزارش‌های اداری فقط برای مدیرعامل، کنترل پروژه و مدیر اداری است" hint="تایم‌شیت و درخواست‌های خودتان را از بخش «اداری» ببینید." />
-    if (p === 'finadmin') return <Empty icon={<Lock className="h-6 w-6" />} title="فضای مالی و اداری فقط برای مدیرعامل، مدیر مالی (فضای مالی) و مدیر اداری (فضای اداری) است" hint="این بخش و Taskهای آن برای نقش شما در دسترس نیست." />
-    return <Empty icon={<Lock className="h-6 w-6" />} title="این بخش فقط برای مدیرعامل و کنترل پروژه است" hint="Workload، Sync، مدیریت و گزارش امتیازات در بخش کنترل پروژه هستند. امتیازات خودتان را از منوی پروفایل › امتیازات من ببینید." />
+    if (p === 'requests' || p === 'timesheet') return <Empty title="This section is unavailable to the CEO." />
+    if (p === 'inbox') return <Empty icon={<Lock className="h-6 w-6" />} title="Your role does not have access to this inbox." hint="Track your own requests in My Requests." />
+    if (p === 'adminreports') return <Empty icon={<Lock className="h-6 w-6" />} title="Office reports are available to the CEO, Project Controls and the Office Manager." hint="See your own timesheet and requests in the Office section." />
+    if (p === 'finadmin') return <Empty icon={<Lock className="h-6 w-6" />} title="This workspace is restricted to the CEO, Finance Manager and Office Manager." hint="Your role does not have access to this section or its tasks." />
+    return <Empty icon={<Lock className="h-6 w-6" />} title="This section is available to the CEO and Project Controls." hint="See your own points in Profile → My Points." />
   }
   switch (p) {
     case 'documents': return <DocumentsPage />
     case 'links': return <LinksPage />
     case 'home': return <Home />
+    case 'settings': return <SettingsPage />
     case 'notifications': return <Notifications />
     case 'projects': return <Projects />
     case 'project': return <ProjectPage projectId={state.nav.projectId ?? ''} />
@@ -189,21 +180,21 @@ function Shell() {
   const { state } = useStore()
   if (!state.session) return <Auth />
   return (
-    <div className="flex min-h-full">
-      <div className="hidden w-[256px] shrink-0 lg:block">
-        <aside className="glass-card glass-sheen thin-scroll sticky top-3 ms-3 mt-3 h-[calc(100vh-24px)] overflow-y-auto" aria-label="منوی کناری">
+    <div className="studio-shell flex min-h-full">
+      <div className="studio-sidebar-column hidden shrink-0 lg:block">
+        <aside className="studio-sidebar glass-card thin-scroll sticky overflow-y-auto" aria-label="Sidebar">
           <SidebarContent />
         </aside>
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenu={() => setMenu(true)} />
-        <main className="mx-auto w-full max-w-[1440px] flex-1 py-6 lg:py-8" style={{ paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))', paddingRight: 'max(16px, env(safe-area-inset-right, 0px))' }} key={`${state.nav.page}-${state.nav.projectId ?? ''}-${state.nav.teamId ?? ''}`}>
+        <main className={cn("mx-auto w-full max-w-[1440px] flex-1 py-6", state.nav.page !== 'home' && "lg:py-8")} style={{ paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))', paddingRight: 'max(16px, env(safe-area-inset-right, 0px))' }} key={JSON.stringify([state.nav.page, state.nav.projectId, state.nav.teamId, state.nav.requestId, state.nav.userId, state.nav.date])}>
           <div className="page-enter lg:px-4"><Main /></div>
         </main>
       </div>
       <Sheet open={menu} onOpenChange={setMenu}>
-        <SheetContent side="right" className="w-[280px] p-0" dir="rtl" style={{ paddingRight: 'env(safe-area-inset-right, 0px)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-          <SheetTitle className="sr-only">منو</SheetTitle>
+        <SheetContent side="left" className="studio-mobile-sidebar w-[min(300px,calc(100vw-24px))] p-0" dir="ltr" style={{ paddingLeft: 'env(safe-area-inset-left, 0px)', paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarContent onNavigate={() => setMenu(false)} />
         </SheetContent>
       </Sheet>
@@ -216,9 +207,9 @@ function Shell() {
 function ThemedToaster() {
   const { state } = useStore()
   return (
-    <Toaster dir="rtl" position="bottom-left" theme={state.theme} toastOptions={{
+    <Toaster dir="ltr" position="bottom-right" theme={state.theme} toastOptions={{
       style: {
-        fontFamily: 'Vazirmatn, Tahoma, sans-serif',
+        fontFamily: 'var(--font-sans)',
         background: 'var(--glass-bg-strong)',
         color: 'hsl(var(--foreground))',
         border: '1px solid var(--glass-border)',
@@ -233,7 +224,7 @@ function ThemedToaster() {
 
 export default function App() {
   return (
-    <DirectionProvider dir="rtl">
+    <DirectionProvider dir="ltr">
       <StoreProvider>
         <Shell />
         <ThemedToaster />

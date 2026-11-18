@@ -1,18 +1,26 @@
 {
   "name": "avand-pargar",
   "private": true,
-  "browserslist": ["> 0.5%", "not dead"],
-  "targets": {"default": {"context": "browser"}},
+  "browserslist": [
+    "> 0.5%",
+    "not dead"
+  ],
+  "targets": {
+    "default": {
+      "context": "browser"
+    }
+  },
   "version": "17.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "check": "tsc -b",
-    "build": "pnpm run check && parcel build index.html --dist-dir web-dist --no-source-maps --no-cache --log-level error && node scripts/fonts.mjs && node scripts/build-server.mjs",
+    "build": "pnpm run check && vite build --outDir web-dist && node scripts/fonts.mjs && node scripts/build-server.mjs",
     "start": "node --env-file=.env server-dist/main.mjs",
     "test": "node tests/run.mjs tests/production.test.ts"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "0.18.0",
     "@hookform/resolvers": "^6.0.0",
     "@radix-ui/react-accordion": "^1.3.1",
     "@radix-ui/react-aspect-ratio": "^1.2.0",
@@ -41,6 +49,7 @@
     "@radix-ui/react-toggle": "^1.2.1",
     "@radix-ui/react-toggle-group": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.4.1",
+    "buffer": "6.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -49,6 +58,7 @@
     "lucide-react": "^1.61.0",
     "next-themes": "^0.4.6",
     "pg": "^8.23.1",
+    "process": "0.11.10",
     "react": "^19.3.1",
     "react-day-picker": "^10.0.2",
     "react-dom": "^19.3.1",
@@ -85,5 +95,10 @@
   "description": "آوند — سامانه‌ی کار و ظرفیت دفتر معماری پرگار (وب + سرور Node/PostgreSQL)",
   "engines": {
     "node": ">=22.12.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@excalidraw/excalidraw@0.18.0": "patches/@excalidraw__excalidraw@0.18.0.patch"
+    }
   }
 }

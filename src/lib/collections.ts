@@ -3,9 +3,9 @@
 import type { State } from './state'
 
 export const COLLECTIONS = [
-  'scores',
+  'scores', 'roleDefinitions', 'whiteboards',
   'supervisionWorkflows', 'deadlinePreferences', 'deadlineEvents', 'siteVisits',
-  'documents', 'importantLinks', 'mindMaps', 'stickyNotes', 'reminders',
+  'folderIcons', 'documents', 'importantLinks', 'mindMaps', 'stickyNotes', 'reminders',
   'teams', 'users', 'projects', 'tasks', 'statusSets', 'allocations', 'holidays', 'leaves',
   'syncItems', 'syncRuns', 'audit', 'writeQueue', 'comments', 'messages', 'notifications', 'lastRead',
   'internalProjects', 'reviewRounds', 'attachments', 'pointEntries', 'pointConfigs', 'workLogs',
@@ -25,9 +25,9 @@ export type Shape =
 
 const id = (x: Any) => String(x.id)
 export const SHAPES: Record<Collection, Shape> = {
-  scores: { type: 'record' },
+  scores: { type: 'record' }, roleDefinitions: { type: 'record' }, whiteboards: { type: 'record' },
   supervisionWorkflows: { type: 'record' }, deadlinePreferences: { type: 'record' }, deadlineEvents: { type: 'record' }, siteVisits: { type: 'record' },
-  documents: { type: 'record' }, importantLinks: { type: 'record' }, mindMaps: { type: 'record' }, stickyNotes: { type: 'record' }, reminders: { type: 'record' },
+  folderIcons: { type: 'record' }, documents: { type: 'record' }, importantLinks: { type: 'record' }, mindMaps: { type: 'record' }, stickyNotes: { type: 'record' }, reminders: { type: 'record' },
   teams: { type: 'array', key: id, order: 'append' },
   users: { type: 'array', key: id, order: 'append' },
   projects: { type: 'array', key: id, order: 'append' },

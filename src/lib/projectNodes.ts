@@ -10,13 +10,13 @@ export function acceptsProjectParent(kind:ProjectNodeChoice,parent:Task|undefine
  return !parent||['phase','stage','group','doctype'].includes(parent.kind)
 }
 export function projectNodeProblem(tasks:Record<string,Task>,t:Task){
- if(!['manual','phase','stage','doctype'].includes(t.kind))return 'نوع ساختار پروژه نامعتبر است.'
+ if(!['manual','phase','stage','doctype'].includes(t.kind))return "The type of project structure is invalid."
  const parent=t.parentId?tasks[t.parentId]:undefined
- if(t.parentId&&(!parent||parent.projectId!==t.projectId||parent.removedFromMdr))return 'والد فعال باید متعلق به همین پروژه باشد.'
+ if(t.parentId&&(!parent||parent.projectId!==t.projectId||parent.removedFromMdr))return "The active parent must belong to this project."
  const choice=t.kind==='manual'&&parent&&['manual','document'].includes(parent.kind)?'subtask':t.kind as ProjectNodeChoice
- if(!acceptsProjectParent(choice,parent))return 'والد با سطح انتخاب‌شده سازگار نیست: Stage زیر Phase، Doc Type زیر Stage یا Group، و Sub Task زیر Task یا Document قرار می‌گیرد.'
+ if(!acceptsProjectParent(choice,parent))return "The parent is not compatible with the selected level: the stage below the stage, the doctor type below the stage or group, and the subtask below the task or document."
  const scope=parent?taskScope(tasks,parent):undefined
- if(scope&&t.workScope&&scope!==t.workScope&&!(scope==='phase2'&&t.workScope==='revit'))return 'فاز مسئول باید با شاخهٔ والد هماهنگ باشد.'
- if(t.kind!=='manual'&&(t.assigneeUserId||t.assigneeTeamId||t.statusId))return 'وضعیت و پیشرفت سطوح ساختاری از تسک‌های زیرمجموعه محاسبه می‌شود.'
+ if(scope&&t.workScope&&scope!==t.workScope&&!(scope==='phase2'&&t.workScope==='revit'))return "The responsible phase must be coordinated with the parent branch."
+ if(t.kind!=='manual'&&(t.assigneeUserId||t.assigneeTeamId||t.statusId))return "The state and progress of structural levels are calculated from sub-tasks."
  return null
 }

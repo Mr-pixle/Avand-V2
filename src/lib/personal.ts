@@ -11,9 +11,9 @@ export function defaultBoard(userId: string): PersonalBoard {
   return {
     userId, defaultStatusId: 'ps-todo',
     statuses: [
-      { id: 'ps-todo', name: 'برای انجام', color: PALETTE[0], done: false },
-      { id: 'ps-doing', name: 'در حال انجام', color: PALETTE[1], done: false },
-      { id: 'ps-done', name: 'انجام شد', color: PALETTE[3], done: true },
+      { id: 'ps-todo', name: "To do", color: PALETTE[0], done: false },
+      { id: 'ps-doing', name: "In Progress", color: PALETTE[1], done: false },
+      { id: 'ps-done', name: "Done", color: PALETTE[3], done: true },
     ],
   }
 }
@@ -85,34 +85,34 @@ export const PRIORITIES: Priority[] = ['low', 'normal', 'high', 'urgent']
 
 export function checkFields(f: { title?: string; description?: string; priority?: string; start?: string; due?: string }, partial = false): string | null {
   if (!partial || f.title !== undefined) {
-    if (!String(f.title ?? '').trim()) return 'عنوان را بنویسید.'
-    if (String(f.title).length > 200) return 'عنوان طولانی است.'
+    if (!String(f.title ?? '').trim()) return "Write the title."
+    if (String(f.title).length > 200) return "The title is long."
   }
-  if (f.description !== undefined && String(f.description).length > 4000) return 'توضیحات طولانی است.'
-  if (f.priority !== undefined && !PRIORITIES.includes(f.priority as Priority)) return 'اولویت نامعتبر است.'
-  if (f.start && !ISO.test(f.start)) return 'تاریخ شروع نامعتبر است.'
-  if (f.due && !ISO.test(f.due)) return 'موعد نامعتبر است.'
-  if (f.start && f.due && f.due < f.start) return 'موعد نمی‌تواند پیش از شروع باشد.'
+  if (f.description !== undefined && String(f.description).length > 4000) return "The explanation is long."
+  if (f.priority !== undefined && !PRIORITIES.includes(f.priority as Priority)) return "Priority is invalid."
+  if (f.start && !ISO.test(f.start)) return "The start date is invalid."
+  if (f.due && !ISO.test(f.due)) return "Time is invalid."
+  if (f.start && f.due && f.due < f.start) return "The time cannot be before the start."
   return null
 }
 
 /** A status list is valid when names are unique, at least one status means "done" and the default is one of them */
 export function checkBoard(statuses: PersonalStatus[], defaultStatusId: string): string | null {
-  if (!Array.isArray(statuses) || !statuses.length) return 'دست‌کم یک Status لازم است.'
-  if (statuses.length > MAX_STATUSES) return `حداکثر ${MAX_STATUSES} Status.`
+  if (!Array.isArray(statuses) || !statuses.length) return "At least one station is needed."
+  if (statuses.length > MAX_STATUSES) return `Up to ${MAX_STATUSES} statuses.`
   const names = new Set<string>()
   for (const s of statuses) {
     const n = String(s?.name ?? '').trim()
-    if (!n) return 'نام همه‌ی Statusها را بنویسید.'
-    if (n.length > 30) return 'نام Status حداکثر ۳۰ نویسه است.'
-    if (names.has(n)) return `نام «${n}» تکراری است.`
+    if (!n) return "Write down the names of all statuses."
+    if (n.length > 30) return "The Status name is up to 30 characters."
+    if (names.has(n)) return `The name ${n} is repetitive.`
     names.add(n)
-    if (!HEX.test(String(s.color))) return 'رنگ نامعتبر است.'
-    if (!s.id || typeof s.id !== 'string') return 'Status نامعتبر است.'
+    if (!HEX.test(String(s.color))) return "Color is invalid."
+    if (!s.id || typeof s.id !== 'string') return "Status is invalid."
   }
-  if (new Set(statuses.map((s) => s.id)).size !== statuses.length) return 'Status تکراری است.'
-  if (!statuses.some((s) => s.done)) return 'دست‌کم یک Status باید «تکمیل‌شده» باشد.'
-  if (!statuses.some((s) => !s.done)) return 'دست‌کم یک Status باید باز (تکمیل‌نشده) باشد.'
-  if (!statuses.some((s) => s.id === defaultStatusId)) return 'Status پیش‌فرض را انتخاب کنید.'
+  if (new Set(statuses.map((s) => s.id)).size !== statuses.length) return "Status is repetitive."
+  if (!statuses.some((s) => s.done)) return "At least one station must be “completed.”"
+  if (!statuses.some((s) => !s.done)) return "At least one station must be open (uncompleted)."
+  if (!statuses.some((s) => s.id === defaultStatusId)) return "Select the default status."
   return null
 }

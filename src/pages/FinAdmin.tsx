@@ -1,3 +1,4 @@
+import { systemLabel } from '@/lib/displayLabels'
 import { useMemo, useState } from 'react'
 import { Briefcase, CalendarDays, ChevronLeft, ChevronRight, Landmark, List, Lock, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,21 +19,21 @@ import { CreateFlowTaskDialog, DueText, FlowList, FlowPill, PriorityChip, useFlo
  * a space the user may not open returns nothing, and every write is checked again by the reducer guard.
  */
 const SPACE_ABOUT: Record<FinSpace, string> = {
-  shared: 'کارهای مشترک مدیرعامل، مدیر مالی و مدیر اداری. هر سه نقش می‌توانند کارها را ایجاد، مدیریت و پیگیری کنند؛ دسترسی به این بخش مجوز ورود به فضای خصوصی دیگر نمی‌دهد.',
-  finance: 'Taskهای مالی دفتر: حساب‌ها، مالیات، مطالبات، بودجه و نقدینگی. فقط مدیرعامل و مدیر مالی این فضا را می‌بینند.',
-  office: 'Taskهای اداری و مدیریتی دفتر: قراردادها، بیمه، پروانه‌ها، خرید و آیین‌نامه‌ها. فقط مدیرعامل و مدیر اداری این فضا را می‌بینند.',
+  shared: "All three roles can create, manage and track tasks; access to this section does not allow entry into the other private space.",
+  finance: "Office Financial Tasks: Accounts, taxes, demands, budgets and liquidity. Only the CEO and financial manager see this space.",
+  office: "Office administrative and management tasks: contracts, insurance, licenses, purchases and regulations. Only the CEO and director see this space.",
 }
 export function FinAdminPage() {
   const { state, me, dispatch } = useStore()
   const spaces = finSpacesOf(me)
   const asked = state.nav.space
   const space: FinSpace | undefined = asked ?? spaces[0]
-  if (!spaces.length) return <Empty icon={<Lock className="h-6 w-6" />} title="فضای مالی و اداری فقط برای مدیرعامل، مدیر مالی و مدیر اداری است" />
-  if (!space || !canSeeFinSpace(me, space)) return <Empty icon={<Lock className="h-6 w-6" />} title={space === 'finance' ? 'فضای مالی فقط برای مدیرعامل و مدیر مالی است' : 'فضای اداری فقط برای مدیرعامل و مدیر اداری است'} hint={spaces.length ? `شما به ${spaces.map((x) => FIN_SPACE_FA[x]).join(' و ')} دسترسی دارید.` : undefined} />
+  if (!spaces.length) return <Empty icon={<Lock className="h-6 w-6" />} title="Financial and administrative space is only for the CEO, financial manager and administrative manager." />
+  if (!space || !canSeeFinSpace(me, space)) return <Empty icon={<Lock className="h-6 w-6" />} title={space === 'finance' ? "The financial space is only for the manager and the financial manager." : "The office space is for the manager and manager only."} hint={spaces.length ? `You have access to ${spaces.map((x) => FIN_SPACE_FA[x]).join(" and ")}.` : undefined} />
   return (
     <div className="flex flex-col gap-5">
       {spaces.length > 1 && (
-        <div role="tablist" aria-label="فضاهای بخش مالی و اداری" className="glass-seg inline-flex max-w-full flex-wrap gap-0.5 !rounded-full p-0.5">
+        <div role="tablist" aria-label="Financial and Administrative Sector Spaces" className="glass-seg inline-flex max-w-full flex-wrap gap-0.5 !rounded-full p-0.5">
           {spaces.map((x) => (
             <button key={x} role="tab" id={`fin-tab-${x}`} aria-selected={x === space} onClick={() => dispatch({ type: 'nav', nav: { page: 'finadmin', space: x } })}
               className={cn('inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors', x === space ? 'bg-background font-semibold text-foreground shadow-sm [&_svg]:text-azure' : 'text-muted-foreground hover:text-foreground')}>
@@ -58,22 +59,22 @@ function SpaceView({ space }: { space: FinSpace }) {
   const openTasks = tasks.filter((t) => flowOf(t) !== 'closed')
   return (
     <div className="flex flex-col gap-5" data-space={space}>
-      <PageHeader eyebrow="فضای مالی و اداری" title={FIN_SPACE_FA[space]} actions={
+      <PageHeader eyebrow="Finance & Administration" title={FIN_SPACE_FA[space]} actions={
         <>
-          <Segmented value={view} onChange={setView} options={[{ value: 'list', label: 'فهرست', icon: <List className="h-3.5 w-3.5" /> }, { value: 'calendar', label: 'تقویم', icon: <CalendarDays className="h-3.5 w-3.5" /> }]} />
-          <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Task تازه</Button>
+          <Segmented value={view} onChange={setView} options={[{ value: 'list', label: 'List', icon: <List className="h-3.5 w-3.5" /> }, { value: 'calendar', label: 'Calendar', icon: <CalendarDays className="h-3.5 w-3.5" /> }]} />
+          <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New Task</Button>
         </>
       }>
-        {SPACE_ABOUT[space]} هماهنگی و نظارت با مدیرعامل است؛ دسترسی در سطح سرویس هم بررسی می‌شود و Taskهای این فضا در هیچ گزارش، Workload، Work Log یا امتیازدهی دیگری نمی‌آیند.
+        {SPACE_ABOUT[space]} Coordinate and monitor with the CEO; access is checked at service level, and tasks in the space do not come in any reports, workload, work log or other privileges.
       </PageHeader>
 
-      <section aria-label="کار هر نفر" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <section aria-label="Each person's work" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="glass-card flex flex-col gap-2 p-4">
-          <div className="eyebrow">کل {FIN_SPACE_FA[space]}</div>
+          <div className="eyebrow">General {FIN_SPACE_FA[space]}</div>
           <dl className="grid grid-cols-3 gap-2 text-center">
-            <div><dt className="text-[11px] text-muted-foreground">باز</dt><dd className="num text-[18px] font-bold">{n(openTasks.length)}</dd></div>
-            <div><dt className="text-[11px] text-muted-foreground">در بررسی</dt><dd className="num text-[18px] font-bold text-azure">{n(openTasks.filter((t) => flowOf(t) === 'in_review').length)}</dd></div>
-            <div><dt className="text-[11px] text-muted-foreground">دیرکرد</dt><dd className={cn('num text-[18px] font-bold', openTasks.some(late) && 'text-destructive')}>{n(openTasks.filter(late).length)}</dd></div>
+            <div><dt className="text-[11px] text-muted-foreground">Open</dt><dd className="num text-[18px] font-bold">{n(openTasks.length)}</dd></div>
+            <div><dt className="text-[11px] text-muted-foreground">In the review</dt><dd className="num text-[18px] font-bold text-azure">{n(openTasks.filter((t) => flowOf(t) === 'in_review').length)}</dd></div>
+            <div><dt className="text-[11px] text-muted-foreground">Overdue</dt><dd className={cn('num text-[18px] font-bold', openTasks.some(late) && 'text-destructive')}>{n(openTasks.filter(late).length)}</dd></div>
           </dl>
         </div>
         {people.map((u) => {
@@ -84,12 +85,12 @@ function SpaceView({ space }: { space: FinSpace }) {
             <div key={u.id} className="glass-card flex flex-col gap-2 p-4" data-person={u.username}>
               <div className="flex items-center gap-2">
                 <Initials user={u} size={28} />
-                <div className="min-w-0"><div className="truncate text-[13.5px] font-semibold">{u.name}</div><div className="text-[11px] text-muted-foreground">{u.title}</div></div>
+                <div className="min-w-0"><div className="truncate text-[13.5px] font-semibold">{u.name}</div><div className="text-[11px] text-muted-foreground">{u.title && systemLabel(u.title)}</div></div>
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-                <span>باز <b className="num text-foreground">{n(mine.length)}</b></span>
-                <span>دیرکرد <b className={cn('num', mine.some(late) ? 'text-destructive' : 'text-foreground')}>{n(mine.filter(late).length)}</b></span>
-                {toDecide > 0 && <span>منتظر تصمیم <b className="num text-azure">{n(toDecide)}</b></span>}
+                <span>Open <b className="num text-foreground">{n(mine.length)}</b></span>
+                <span>Overdue <b className={cn('num', mine.some(late) ? 'text-destructive' : 'text-foreground')}>{n(mine.filter(late).length)}</b></span>
+                {toDecide > 0 && <span>Waiting for decision <b className="num text-azure">{n(toDecide)}</b></span>}
               </div>
               <div className="flex items-center gap-2"><Bar value={avg} /><span className="num w-9 shrink-0 text-end text-[11.5px]">{pct(avg)}</span></div>
             </div>
@@ -99,8 +100,8 @@ function SpaceView({ space }: { space: FinSpace }) {
 
       <div className="flex flex-col gap-3">
         {bar}
-        {tasks.length === 0 ? <Empty icon={<Landmark className="h-6 w-6" />} title="هنوز Taskی در این فضا نیست" hint="با «Task تازه» کار را ثبت و ارجاع دهید." />
-          : view === 'list' ? (filtered.length ? <FlowList tasks={filtered} estimation={false} /> : <Empty title="Taskی با این فیلترها نیست" />)
+        {tasks.length === 0 ? <Empty icon={<Landmark className="h-6 w-6" />} title="There is no task in this space" hint="Register and refer to Task New." />
+          : view === 'list' ? (filtered.length ? <FlowList tasks={filtered} estimation={false} /> : <Empty title="It's not a problem with these filters" />)
             : <SpanCalendar tasks={filtered} idPrefix="fa" />}
       </div>
       {open && <CreateFlowTaskDialog kind="finadmin" finSpace={space} open onOpenChange={setOpen} />}
@@ -128,7 +129,7 @@ export function SpanCalendar({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
   const monthEnd = addDays(month0, len - 1)
   const first = addDays(month0, -weekdayIndex(month0))
   const weeks = Array.from({ length: Math.ceil((weekdayIndex(month0) + len) / 7) }, (_, w) => Array.from({ length: 7 }, (_, i) => addDays(first, w * 7 + i)))
-  const holidays = useMemo(() => new Map(state.holidays.map((h) => [h.date, h.title])), [state.holidays])
+  const holidays = useMemo(() => new Map(state.holidays.map((h) => [h.date, systemLabel(h.title)])), [state.holidays])
   const spans = useMemo(() => tasks.map(spanOf).filter((x): x is Span => !!x).sort((a, b) => a.s.localeCompare(b.s) || b.e.localeCompare(a.e)), [tasks])
   const undated = tasks.filter((t) => !spanOf(t))
   const inMonth = spans.filter((x) => x.s <= monthEnd && x.e >= month0).sort((a, b) => a.e.localeCompare(b.e))
@@ -136,20 +137,20 @@ export function SpanCalendar({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
   const tone = (t: Task) => {
     const f = flowOf(t)
     if (f === 'closed') return 'bg-leaf-soft text-leaf-ink'
-    if (f === 'in_review') return 'bg-azure text-white'
+    if (f === 'in_review') return 'bg-azure text-azure-foreground'
     if (f === 'rework') return 'bg-danger-soft text-destructive'
     return 'bg-azure-soft text-azure-ink'
   }
   return (
     <div className="flex flex-col gap-3" id={`${idPrefix}-cal`}>
       <div className="flex flex-wrap items-center gap-1">
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAnchor(addJMonths(month0, -1))} aria-label="ماه قبل"><ChevronRight className="h-4 w-4" /></Button>
-        <Button variant="outline" size="sm" className="h-8" onClick={() => setAnchor(TODAY)}>امروز</Button>
-        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAnchor(addJMonths(month0, 1))} aria-label="ماه بعد"><ChevronLeft className="h-4 w-4" /></Button>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAnchor(addJMonths(month0, -1))} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></Button>
+        <Button variant="outline" size="sm" className="h-8" onClick={() => setAnchor(TODAY)}>Today</Button>
+        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAnchor(addJMonths(month0, 1))} aria-label="Next month"><ChevronRight className="h-4 w-4" /></Button>
         <h2 className="ms-2 font-semibold" aria-live="polite">{J_MONTHS[j.jm - 1]} {digits(j.jy)}</h2>
-        <span className="num ms-auto text-[12px] text-muted-foreground">{n(inMonth.length)} Task در این ماه</span>
+        <span className="num ms-auto text-[12px] text-muted-foreground">{n(inMonth.length)} Task this month</span>
       </div>
-      <div className="overflow-hidden glass-card" role="grid" aria-label={`تقویم ${J_MONTHS[j.jm - 1]} ${digits(j.jy)}`}>
+      <div className="overflow-hidden glass-card" role="grid" aria-label={`${J_MONTHS[j.jm - 1]} ${digits(j.jy)} Calendar`}>
         <div className="grid grid-cols-7 border-b bg-foreground/[0.03] text-center text-[11.5px] font-medium text-muted-foreground" role="row">
           {WEEKDAYS.map((w, i) => <div key={w} className="py-1.5" role="columnheader"><span className="hidden sm:inline">{w}</span><span className="sm:hidden">{WEEKDAYS_SHORT[i]}</span></div>)}
         </div>
@@ -184,7 +185,7 @@ export function SpanCalendar({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
                 const cutStart = x.s < w0, cutEnd = x.e > w6
                 const dueHere = !!x.t.due && x.t.due >= w0 && x.t.due <= w6
                 const lateBar = flowOf(x.t) !== 'closed' && !!x.t.due && x.t.due < TODAY
-                const label = `${x.t.name} — ${L('start')} ${d(x.t.start)}، ${L('due')} ${d(x.t.due)}، ${userById[x.t.assigneeUserId ?? '']?.name ?? `بدون ${L('assignee')}`}`
+                const label = `${x.t.name} — ${L('start')} ${d(x.t.start)}, ${L('due')} ${d(x.t.due)}, ${userById[x.t.assigneeUserId ?? '']?.name ?? `No ${L('assignee')}`}`
                 return (
                   <button key={x.t.id} type="button" onClick={() => open(x.t.id)} title={label} aria-label={label} data-task={x.t.id}
                     className={cn('relative z-[1] mx-0.5 flex min-w-0 items-center gap-1 overflow-hidden px-1.5 text-start text-[11px] font-medium leading-none shadow-sm transition-[filter] hover:brightness-95', tone(x.t),
@@ -198,13 +199,13 @@ export function SpanCalendar({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
                   </button>
                 )
               })}
-              {hidden > 0 && <div className="z-[1] self-end px-1.5 pb-1 text-[10.5px] text-muted-foreground" style={{ gridColumn: '1 / -1', gridRow: rows + 2 }}>+{n(hidden)} Task دیگر در این هفته — از فهرست یا فیلترها ببینید</div>}
+              {hidden > 0 && <div className="z-[1] self-end px-1.5 pb-1 text-[10.5px] text-muted-foreground" style={{ gridColumn: '1 / -1', gridRow: rows + 2 }}>+{n(hidden)} Another task this week — see from the list or filters</div>}
             </div>
           )
         })}
       </div>
       {/* small screens: the same tasks as an agenda, ordered by Due */}
-      <ul className="flex flex-col divide-y overflow-hidden glass-card sm:hidden" aria-label="Taskهای این ماه">
+      <ul className="flex flex-col divide-y overflow-hidden glass-card sm:hidden" aria-label="Tasks this month">
         {inMonth.map((x) => (
           <li key={x.t.id}>
             <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-start text-[12.5px]" onClick={() => open(x.t.id)}>
@@ -213,20 +214,20 @@ export function SpanCalendar({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
             </button>
           </li>
         ))}
-        {!inMonth.length && <li className="px-3 py-4 text-center text-[12px] text-muted-foreground">در این ماه Taskی نیست.</li>}
+        {!inMonth.length && <li className="px-3 py-4 text-center text-[12px] text-muted-foreground">There is no task this month.</li>}
       </ul>
       {undated.length > 0 && (
         <div className="text-[12px] text-muted-foreground">
-          بدون {L('start')} و {L('due')}: {undated.map((t, i) => <span key={t.id}>{i > 0 && '، '}<button type="button" className="text-foreground hover:text-azure hover:underline" onClick={() => open(t.id)}>{t.name}</button></span>)}
+          No {L('start')} and {L('due')}: {undated.map((t, i) => <span key={t.id}>{i > 0 && ', '}<button type="button" className="text-foreground hover:text-azure hover:underline" onClick={() => open(t.id)}>{t.name}</button></span>)}
         </div>
       )}
       <div className="flex flex-wrap items-center gap-4 text-[11.5px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-azure-soft" /> از {L('start')} تا {L('due')}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-azure-soft" /> from {L('start')} to {L('due')}</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 border border-foreground" /> {L('due')}</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-azure" /> در انتظار بررسی</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-leaf-soft" /> بسته‌شده</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded ring-1 ring-destructive" /> گذشته از موعد</span>
-        <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm border" /> پنجشنبه، جمعه و تعطیلات</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-azure" /> In Review</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded bg-leaf-soft" /> Closed</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-6 rounded ring-1 ring-destructive" /> Overdue</span>
+        <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm border" /> Thursday, Friday and Holiday</span>
       </div>
     </div>
   )

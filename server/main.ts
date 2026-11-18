@@ -1,5 +1,6 @@
 // Taraz server: `node server-dist/main.mjs`. Configuration comes from the environment (see README › Deployment).
-import { migrateAvandTeams, migrateOrganization, migrateStages, migrateWorkspace, migrateOffice } from './migrations'
+import { resolveRole } from '../src/lib/accessRoles'
+import { migratePhase2Team, migrateAvandTeams, migrateOrganization, migrateStages, migrateWorkspace, migrateOffice } from './migrations'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
@@ -36,7 +37,7 @@ export async function startServer(opts: ServerOptions = {}) {
       const username = (env.TARAZ_ADMIN_USERNAME ?? '').trim().toLowerCase()
       const password = env.TARAZ_ADMIN_PASSWORD ?? ''
       if (!/^[a-z0-9._-]{3,24}$/.test(username) || password.length < 8) throw new Error('Empty database: set TARAZ_ADMIN_USERNAME and TARAZ_ADMIN_PASSWORD (8+ characters) for the CEO account.')
-      return productionState({ username, password, name: env.TARAZ_ADMIN_NAME?.trim() || 'مدیرعامل' })
+      return productionState({ username, password, name: env.TARAZ_ADMIN_NAME?.trim() || "CEOs" })
     })()
     log('empty database: initializing administrator and system configuration')
     await tx(db, async (c) => {
@@ -51,8 +52,9 @@ export async function startServer(opts: ServerOptions = {}) {
   await migrateWorkspace(db)
   await migrateOffice(db)
   await migrateAvandTeams(db)
+  await migratePhase2Team(db)
   const data = await loadData(db)
-  const state: State = { ...data, session: null, persianDigits: true, nav: { page: 'home' }, openTaskId: null, profileUserId: null, theme: 'system', profileTab: 'profile', denial: null }
+  const state: State = { ...data, users: data.users.map(user => resolveRole(data.roleDefinitions, user)), session: null, nav: { page: 'home' }, openTaskId: null, profileUserId: null, theme: 'system', profileTab: 'profile', denial: null }
   // ids made by this process never collide with ids of an earlier run
   setIdBase(`${Date.now().toString(36)}-`)
   refreshToday()
@@ -60,7 +62,7 @@ export async function startServer(opts: ServerOptions = {}) {
   await core.commit(state) // migrate/reconcile derived scores atomically before accepting requests
   // a run cut short by a restart would otherwise look busy forever
   if (state.syncRuns.some((r) => r.state === 'running')) {
-    await core.exclusive(() => core.commit({ ...core.state, syncRuns: core.state.syncRuns.map((r) => (r.state === 'running' ? { ...r, state: 'failed', log: [...r.log, { level: 'error', text: 'سرور در میانه‌ی این اجرا دوباره راه‌اندازی شد؛ اجرا ناتمام ماند.' }] } : r)) }))
+    await core.exclusive(() => core.commit({ ...core.state, syncRuns: core.state.syncRuns.map((r) => (r.state === 'running' ? { ...r, state: 'failed', log: [...r.log, { level: 'error', text: "The server was restarted in the middle of the run; the run was unfinished." }] } : r)) }))
   }
 
   const sa = loadServiceAccount(env)

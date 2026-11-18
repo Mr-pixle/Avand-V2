@@ -1,3 +1,4 @@
+import { TeamName } from '@/components/ItemIcon'
 import { Fragment, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { AtSign, SendHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -5,7 +6,7 @@ import { useStore } from '@/lib/store'
 import { Initials } from './common'
 
 /** Textarea that suggests members after typing "@" and inserts their username (ID). */
-export function MentionInput({ id, value, onChange, onSubmit, memberIds, placeholder, disabled, submitLabel = 'ارسال', rows = 2 }: {
+export function MentionInput({ id, value, onChange, onSubmit, memberIds, placeholder, disabled, submitLabel = 'Send', rows = 2 }: {
   id: string; value: string; onChange: (v: string) => void; onSubmit: () => void; memberIds?: string[]
   placeholder?: string; disabled?: boolean; submitLabel?: string; rows?: number
 }) {
@@ -54,21 +55,21 @@ export function MentionInput({ id, value, onChange, onSubmit, memberIds, placeho
   return (
     <div className="relative">
       {open && (
-        <div className="glass-pop absolute bottom-full start-0 z-30 mb-1.5 w-72 overflow-hidden rounded-xl" role="listbox" aria-label="اعضا">
-          <div className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">تگ کردن عضو با ID — Enter برای انتخاب</div>
+        <div className="glass-pop absolute bottom-full start-0 z-30 mb-1.5 w-72 overflow-hidden rounded-xl" role="listbox" aria-label="Members">
+          <div className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">Tag Member with ID — Enter to select</div>
           {matches.map((u, i) => (
             <button key={u.id} type="button" role="option" aria-selected={i === hi} onMouseDown={(e) => { e.preventDefault(); pick(u.username) }} onMouseEnter={() => setHi(i)}
               className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-start text-[13px]', i === hi && 'bg-foreground/[0.07]')}>
               <Initials user={u} size={22} />
               <span className="min-w-0 flex-1 truncate">{u.name}</span>
               <span className="mono text-[11px] text-muted-foreground">@{u.username}</span>
-              <span className="hidden text-[10.5px] text-muted-foreground sm:inline">{teamById[u.teamId]?.name}</span>
+              <span className="hidden text-[10.5px] text-muted-foreground sm:inline"><TeamName team={teamById[u.teamId]} /></span>
             </button>
           ))}
         </div>
       )}
       <div className={cn('flex items-end gap-2 rounded-xl border border-input bg-background/80 p-1.5 shadow-[inset_0_1px_2px_hsl(222_40%_20%/0.05)] transition-[border-color,box-shadow] duration-150 focus-within:border-azure focus-within:ring-4 focus-within:ring-azure/15', disabled && 'opacity-60')}>
-        <button type="button" onClick={insertAt} disabled={disabled} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" aria-label="تگ کردن عضو" title="تگ کردن عضو با @">
+        <button type="button" onClick={insertAt} disabled={disabled} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground" aria-label="Tag Member" title="Tag Member with @">
           <AtSign className="h-4 w-4" />
         </button>
         <textarea id={id} ref={ref} rows={rows} value={value} disabled={disabled} placeholder={placeholder}
@@ -81,7 +82,7 @@ export function MentionInput({ id, value, onChange, onSubmit, memberIds, placeho
           <SendHorizontal className="h-4 w-4 -scale-x-100" /> <span className="hidden sm:inline">{submitLabel}</span>
         </button>
       </div>
-      <div className="mt-1 text-[11px] text-muted-foreground">برای تگ کردن، @ و ID عضو را بنویسید. شماره‌ی سند را با # بنویسید تا لینک شود. Enter ارسال، Shift+Enter خط جدید.</div>
+      <div className="mt-1 text-[11px] text-muted-foreground">To tag, write @ and member ID. Write the document number with # to link. Enter send, Shift+Enter new line.</div>
     </div>
   )
 }

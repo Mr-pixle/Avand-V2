@@ -1,5 +1,7 @@
+import { legacySystemText, projectTypeLabel } from '@/lib/displayLabels'
+import { TeamName } from '@/components/ItemIcon'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpLeft, Bell, Hash, Info, Lock, Megaphone, Users } from 'lucide-react'
+import { ArrowUpRight, Bell, Hash, Info, Lock, Megaphone, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
@@ -11,8 +13,8 @@ import { MentionInput, RichText } from '@/components/Mention'
 import { NotifItem, useOpenLink } from './Notifications'
 
 export function channelName(store: ReturnType<typeof useStore>, id: string) {
-  if (id === 'general') return 'گفتگوی عمومی'
-  if (id === 'announce') return 'اطلاعیه‌های سازمانی'
+  if (id === 'general') return 'General Chat'
+  if (id === 'announce') return 'Studio Announcements'
   const p = store.projectById[id.replace('project:', '')]
   return p ? p.name : id
 }
@@ -36,7 +38,7 @@ export function ChatPage({ kind }: { kind: 'project' | 'general' }) {
   }, [members, userById])
   const go = (id: string) => dispatch({ type: 'nav', nav: { page: kind === 'project' ? 'pchat' : 'chat', channelId: id } })
 
-  if (!current) return <Empty icon={<Lock className="h-6 w-6" />} title="هنوز عضو چت پروژه‌ای نیستید" hint="اعضای تیم‌های هر پروژه (تیم‌های ثابت، تیم فاز ۱، تیم فاز ۲ و Revit) به چت همان پروژه دسترسی دارند." />
+  if (!current) return <Empty icon={<Lock className="h-6 w-6" />} title="No project chat membership yet." hint="Project team members can access the chat for their project." />
   const canPost = current !== 'announce' || can.perm('announce.post')
   const project = current.startsWith('project:') ? projectById[current.slice(8)] : undefined
   const send = () => {
@@ -48,20 +50,20 @@ export function ChatPage({ kind }: { kind: 'project' | 'general' }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader eyebrow={kind === 'project' ? 'گفتگو' : 'سازمان'} title={kind === 'project' ? 'چت پروژه' : 'چت عمومی'}>
-        {kind === 'project' ? 'هر پروژه یک کانال برای اعضای تیم‌های همان پروژه دارد. رویدادهای مهم پروژه (Sync، صدور سند، Write-back) هم خودکار اینجا ثبت می‌شود.' : 'گفتگوی عمومی دفتر و اطلاعیه‌های سازمانی. اطلاعیه‌ها را مدیر و کنترل پروژه منتشر می‌کنند و برای همه اعلان می‌شود.'}
+      <PageHeader eyebrow={kind === 'project' ? 'Chat' : 'Organization'} title={kind === 'project' ? 'Project Chat' : 'General Chat'}>
+        {kind === 'project' ? 'Each project has a channel for its team members. Sync, document and write-back updates appear there automatically.' : 'Studio chat and announcements from authorized staff.'}
       </PageHeader>
 
       <div className="lg:hidden">
         <Select value={current} onValueChange={go}>
           <SelectTrigger id="chat-channel" className="h-10"><SelectValue /></SelectTrigger>
-          <SelectContent>{channels.map((c) => <SelectItem key={c} value={c}>{channelName(store, c)}{unreadIn(c) ? ` (${n(unreadIn(c))} تازه)` : ''}</SelectItem>)}</SelectContent>
+          <SelectContent>{channels.map((c) => <SelectItem key={c} value={c}>{channelName(store, c)}{unreadIn(c) ? ` (${n(unreadIn(c))} new)` : ''}</SelectItem>)}</SelectContent>
         </Select>
       </div>
 
       <div className="grid min-h-[560px] grid-cols-1 overflow-hidden glass-card lg:h-[calc(100vh-240px)] lg:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_260px]">
-        <nav className="hidden flex-col border-e bg-foreground/[0.03] lg:flex" aria-label="کانال‌ها">
-          <div className="eyebrow px-4 pb-1.5 pt-4">{kind === 'project' ? 'پروژه‌های من' : 'کانال‌ها'}</div>
+        <nav className="hidden flex-col border-e bg-foreground/[0.03] lg:flex" aria-label="Channels">
+          <div className="eyebrow px-4 pb-1.5 pt-4">{kind === 'project' ? 'My Projects' : 'Channels'}</div>
           <div className="flex flex-col gap-0.5 overflow-y-auto px-2 pb-3 thin-scroll">
             {channels.map((c) => {
               const u = unreadIn(c)
@@ -71,7 +73,7 @@ export function ChatPage({ kind }: { kind: 'project' | 'general' }) {
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{channelName(store, c)}</span>
                   {c.startsWith('project:') && <span className="mono text-[10px] text-muted-foreground">{c.slice(8)}</span>}
-                  {u > 0 && c !== current && <span className="num rounded-full bg-azure px-1.5 text-[10.5px] font-semibold text-white">{n(u)}</span>}
+                  {u > 0 && c !== current && <span className="num rounded-full bg-azure px-1.5 text-[10.5px] font-semibold text-azure-foreground">{n(u)}</span>}
                 </button>
               )
             })}
@@ -82,21 +84,21 @@ export function ChatPage({ kind }: { kind: 'project' | 'general' }) {
           <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 font-semibold">{current === 'announce' ? <Megaphone className="h-4 w-4" /> : <Hash className="h-4 w-4" />}{channelName(store, current)}</div>
-              <div className="num text-[11.5px] text-muted-foreground">{n(members.length)} عضو{project ? `، ${project.code}، ${project.type}` : ''}</div>
+              <div className="num text-[11.5px] text-muted-foreground">{n(members.length)} members{project ? `, ${project.code}, ${projectTypeLabel(project.type)}` : ''}</div>
             </div>
-            {project && <Button size="sm" variant="outline" onClick={() => dispatch({ type: 'nav', nav: { page: 'project', projectId: project.id } })}>صفحه‌ی پروژه <ArrowUpLeft className="h-3.5 w-3.5" /></Button>}
+            {project && <Button size="sm" variant="outline" onClick={() => dispatch({ type: 'nav', nav: { page: 'project', projectId: project.id } })}>Project Page <ArrowUpRight className="h-3.5 w-3.5" /></Button>}
           </header>
           <div className="min-h-[320px] flex-1 overflow-y-auto px-4 py-3 thin-scroll">
-            {messages.length === 0 && <div className="py-10 text-center text-[13px] text-muted-foreground">هنوز پیامی نیست. اولین پیام را بفرستید.</div>}
+            {messages.length === 0 && <div className="py-10 text-center text-[13px] text-muted-foreground">No messages yet.</div>}
             <MessageList messages={messages} />
             <div ref={bottom} />
           </div>
           <div className="border-t p-3">
             {canPost ? (
               <MentionInput id={`chat-input-${current}`} value={draft[current] ?? ''} onChange={(v) => setDraft((d) => ({ ...d, [current]: v }))} onSubmit={send} memberIds={members}
-                placeholder={current === 'announce' ? 'متن اطلاعیه برای همه‌ی اعضای دفتر…' : `پیام به ${channelName(store, current)}…`} submitLabel={current === 'announce' ? 'انتشار' : 'ارسال'} />
+                placeholder={current === 'announce' ? 'Write a studio announcement…' : `Message ${channelName(store, current)}…`} submitLabel={current === 'announce' ? 'Publish' : 'Send'} />
             ) : (
-              <div className="flex items-center gap-2 rounded-md bg-foreground/[0.03] px-3 py-2.5 text-[12.5px] text-muted-foreground"><Lock className="h-3.5 w-3.5" /> فقط مدیرعامل، مدیریت، کنترل پروژه و مدیر سیستم اطلاعیه منتشر می‌کنند. برای گفتگو از «گفتگوی عمومی» استفاده کنید.</div>
+              <div className="flex items-center gap-2 rounded-md bg-foreground/[0.03] px-3 py-2.5 text-[12.5px] text-muted-foreground"><Lock className="h-3.5 w-3.5" /> Only the CEO, manager, project control and system administrator will publish notifications. Use “General Chat” to chat.</div>
             )}
           </div>
         </section>
@@ -104,21 +106,21 @@ export function ChatPage({ kind }: { kind: 'project' | 'general' }) {
         <aside className="hidden min-h-0 flex-col border-s xl:flex">
           {kind === 'general' && (
             <div className="border-b">
-              <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="flex items-center gap-1.5 text-[13px] font-semibold"><Bell className="h-3.5 w-3.5" /> اعلان‌های اخیر من</span>
-                <button className="text-[11.5px] text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'notifications' } })}>همه</button></div>
+              <div className="flex items-center justify-between px-4 pb-1 pt-3"><span className="flex items-center gap-1.5 text-[13px] font-semibold"><Bell className="h-3.5 w-3.5" /> My Recent Notifications</span>
+                <button className="text-[11.5px] text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'notifications' } })}>All</button></div>
               <div className="max-h-[260px] divide-y overflow-y-auto thin-scroll">{myNotifs.slice(0, 4).map((x) => <NotifItem key={x.id} n={x} compact />)}</div>
             </div>
           )}
-          <div className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[13px] font-semibold"><Users className="h-3.5 w-3.5" /> اعضا</div>
+          <div className="flex items-center gap-1.5 px-4 pb-1 pt-3 text-[13px] font-semibold"><Users className="h-3.5 w-3.5" /> Members</div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 thin-scroll">
             {byTeam.map(([tid, ids]) => (
               <div key={tid} className="mt-2">
-                <div className="px-2 text-[11px] text-muted-foreground">{teamById[tid]?.name ?? '—'}</div>
+                <div className="px-2 text-[11px] text-muted-foreground"><TeamName team={teamById[tid]} /></div>
                 {ids.map((id) => {
                   const u = userById[id]
                   return (
                     <button key={id} onClick={() => can.editUser(id) && dispatch({ type: 'openProfile', id })} className={cn('flex w-full items-center gap-2 rounded px-2 py-1 text-start text-[12.5px]', can.editUser(id) ? 'hover:bg-accent' : 'cursor-default')}>
-                      <Initials user={u} size={22} /><span className="min-w-0 flex-1 truncate">{u.name}{id === me.id && <span className="text-muted-foreground"> (شما)</span>}</span>
+                      <Initials user={u} size={22} /><span className="min-w-0 flex-1 truncate">{u.name}{id === me.id && <span className="text-muted-foreground"> (you)</span>}</span>
                       <bdi className="mono text-[10.5px] text-muted-foreground">@{u.username}</bdi>
                     </button>
                   )
@@ -155,8 +157,8 @@ function MessageList({ messages }: { messages: ChatMessage[] }) {
             {m.system ? (
               <div className="my-1.5 flex items-start gap-2 rounded-md bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-muted-foreground">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 flex-1"><RichText text={m.text} /></span>
-                {m.link && <button className="shrink-0 text-azure hover:underline" onClick={() => open(m.link)}>مشاهده</button>}
+                <span className="min-w-0 flex-1"><RichText text={legacySystemText(m.text)} /></span>
+                {m.link && <button className="shrink-0 text-azure hover:underline" onClick={() => open(m.link)}>View</button>}
                 <span className="num shrink-0 text-[11px]">{clock(m.at)}</span>
               </div>
             ) : (

@@ -8,12 +8,12 @@ export interface FieldGroup { id: FieldGroupId; letter: string; title: string; s
 
 /** Order = order on the task page and order of columns in every task table */
 export const FIELD_GROUPS: readonly FieldGroup[] = [
-  { id: 'a', letter: 'A', title: 'شناسه و طبقه‌بندی', short: 'شناسه', about: 'چه کاری است و کجای کار قرار می‌گیرد' },
-  { id: 'b', letter: 'B', title: 'افراد', short: 'افراد', about: 'چه کسی انجام می‌دهد، بررسی می‌کند و همراه است' },
-  { id: 'c', letter: 'C', title: 'زمان‌بندی و برآورد', short: 'زمان‌بندی', about: 'کی شروع و کی تمام شود، چقدر کار است و به چه وابسته است' },
-  { id: 'd', letter: 'D', title: 'وضعیت و پیشرفت', short: 'وضعیت', about: 'کجای کار است: Status، پیشرفت، زمان واقعی و نتیجه' },
-  { id: 'e', letter: 'E', title: 'بررسی و پیوست', short: 'بررسی', about: 'دورهای بررسی و فایل‌ها' },
-  { id: 'f', letter: 'F', title: 'گفتگو و تاریخچه', short: 'گفتگو', about: 'کامنت‌ها، پیگیری اقدامات و AuditLog' },
+  { id: 'a', letter: 'A', title: "ID and classification", short: "ID (disambiguation)", about: "What is it and where does it work?" },
+  { id: 'b', letter: 'B', title: "People", short: "People", about: "Who does it, checks it out, and is accompanying it." },
+  { id: 'c', letter: 'C', title: "Timing and Estimation", short: "Schedule", about: "When to start and when to finish, how much work it is and what it depends on." },
+  { id: 'd', letter: 'D', title: "Status and Progress", short: "State of affairs", about: "Where it works: Status, progress, real-time and result" },
+  { id: 'e', letter: 'E', title: "Check and Attachment", short: "Checkout", about: "Review periods and files" },
+  { id: 'f', letter: 'F', title: "Dialogue and History", short: "Conversations", about: "Comments, follow-up actions and AuditLog" },
 ]
 
 export type FieldKey =
@@ -26,42 +26,42 @@ export interface FieldDef { label: string; group: FieldGroupId; unit?: string }
 
 export const TASK_FIELDS: Record<FieldKey, FieldDef> = {
   // A — identity and classification
-  name: { label: 'عنوان', group: 'a' },
+  name: { label: "Title", group: 'a' },
   docNumber: { label: 'Doc Number', group: 'a' },
-  source: { label: 'منبع', group: 'a' },
-  project: { label: 'پروژه', group: 'a' },
-  space: { label: 'فضا', group: 'a' },
-  type: { label: 'نوع کار', group: 'a' },
-  priority: { label: 'اولویت', group: 'a' },
+  source: { label: "Source", group: 'a' },
+  project: { label: "Project", group: 'a' },
+  space: { label: "Category: Space", group: 'a' },
+  type: { label: "Type of work", group: 'a' },
+  priority: { label: "Priority", group: 'a' },
   pkg: { label: 'Package', group: 'a' },
   floor: { label: 'Floor', group: 'a' },
-  location: { label: 'محل در کارگاه', group: 'a' },
-  internalProjectId: { label: 'پروژه‌ی داخلی', group: 'a' },
-  description: { label: 'شرح', group: 'a' },
-  subtasks: { label: 'زیرتسک‌ها', group: 'a' },
+  location: { label: "Location in the workshop", group: 'a' },
+  internalProjectId: { label: "The Interior Project", group: 'a' },
+  description: { label: "Description", group: 'a' },
+  subtasks: { label: "Zirtsk", group: 'a' },
   // B — people
-  assignee: { label: 'مسئول', group: 'b' },
-  team: { label: 'تیم', group: 'b' },
-  reporter: { label: 'گزارش‌دهنده / سازنده', group: 'b' },
+  assignee: { label: "Responsible", group: 'b' },
+  team: { label: "Team", group: 'b' },
+  reporter: { label: "Reporter / Manufacturer", group: 'b' },
   reviewer: { label: 'Reviewer', group: 'b' },
-  participants: { label: 'مشارکت‌کنندگان', group: 'b' },
+  participants: { label: "Participants", group: 'b' },
   // C — schedule and effort
-  estimation: { label: 'Estimation', group: 'c', unit: 'نفر-ساعت' },
-  baselineEstimation: { label: 'Original Estimation', group: 'c', unit: 'نفر-ساعت' },
+  estimation: { label: 'Estimation', group: 'c', unit: "Person-hours" },
+  baselineEstimation: { label: 'Original Estimation', group: 'c', unit: "Person-hours" },
   start: { label: 'Start', group: 'c' },
   due: { label: 'Due Date', group: 'c' },
-  baselineDue: { label: 'Due اولیه (Baseline)', group: 'c' },
+  baselineDue: { label: "Primary Due (Baseline)", group: 'c' },
   planIssue: { label: 'Plan Issue Date', group: 'c' },
-  dependsOn: { label: 'پیش‌نیازها', group: 'c' },
+  dependsOn: { label: "Prerequisites", group: 'c' },
   allocation: { label: 'Allocation', group: 'c' },
   // D — status and progress
   status: { label: 'Status', group: 'd' },
-  progress: { label: 'پیشرفت', group: 'd' },
+  progress: { label: "Progression", group: 'd' },
   weight: { label: 'Weight', group: 'd' },
   actualStart: { label: 'Actual Start', group: 'd' },
   actualFinish: { label: 'Actual Finish', group: 'd' },
   worklog: { label: 'Work Log', group: 'd' },
-  wf: { label: 'W.F (ضریب وزن)', group: 'd' },
+  wf: { label: "W.F. (weight factor)", group: 'd' },
   point: { label: 'Point', group: 'd' },
 }
 
@@ -90,5 +90,5 @@ export const AUDIT_FIELD: Partial<Record<keyof Task, string>> = {
   name: L('name'), description: L('description'), type: L('type'), priority: L('priority'), location: L('location'), internalProjectId: L('internalProjectId'),
   reporterId: L('reporter'), reviewerId: L('reviewer'), participantIds: L('participants'),
   estimation: L('estimation'), start: L('start'), due: L('due'), dependsOn: L('dependsOn'),
-  wf: L('wf'), progressPct: L('progress'), parentId: 'والد',
+  wf: L('wf'), progressPct: L('progress'), parentId: "Dad",
 }

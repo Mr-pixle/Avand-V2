@@ -1,18 +1,21 @@
 import type { State, NewFile } from './state'
+import { has } from './policy'
+import { validIcon } from './itemIcons'
 import type { User } from './types'
 import { projectPeople } from './organization'
 
-export const CATEGORIES = { checklists: 'چک‌لیست‌ها', forms: 'فرم‌ها', standards: 'استانداردها', regulations: 'آیین‌نامه‌ها', others: 'سایر' } as const
-export interface DocumentEntry { id: string; title: string; category: keyof typeof CATEGORIES; file: NewFile; uploadedBy: string; uploadedAt: string; updatedAt: string }
+export const CATEGORIES = { checklists: "Checklists", forms: "Forms", standards: "Standards", regulations: "Category: Regulations", others: "Other" } as const
+export interface DocumentEntry { id: string; title: string; icon?: string; category: keyof typeof CATEGORIES; file: NewFile; uploadedBy: string; uploadedAt: string; updatedAt: string }
 export interface ImportantLink { id: string; title: string; kind: 'website' | 'email'; address: string; description: string; icon: string; updatedAt: string }
 export interface MindNode { id: string; parentId: string | null; title: string; description: string; x: number; y: number; color?: string; shape?: 'card' | 'pill' | 'plain'; fontSize?: number; bold?: boolean; collapsed?: boolean }
 export interface MindMap { id: string; nodes: MindNode[]; edges: { from: string; to: string }[]; revision: number; updatedAt: string; updatedBy: string }
 export interface StickyNote { pinned?: boolean; createdAt?: string; id: string; ownerId: string; title: string; text: string; color: string; priority: 'high' | 'medium' | 'low'; status: 'active' | 'completed' | 'archived'; reminderAt: string; updatedAt: string }
 export interface Reminder { id: string; ownerId: string; title: string; description: string; dueAt: string; status: 'active' | 'completed' | 'expired'; noteId?: string; notifiedAt?: string; updatedAt: string }
-export interface WorkspaceData { documents: Record<string, DocumentEntry>; importantLinks: Record<string, ImportantLink>; mindMaps: Record<string, MindMap>; stickyNotes: Record<string, StickyNote>; reminders: Record<string, Reminder> }
-export const emptyWorkspace = (): WorkspaceData => ({ documents: {}, importantLinks: {}, mindMaps: {}, stickyNotes: {}, reminders: {} })
+export interface WorkspaceData { folderIcons: Partial<Record<keyof typeof CATEGORIES, string>>; documents: Record<string, DocumentEntry>; importantLinks: Record<string, ImportantLink>; mindMaps: Record<string, MindMap>; stickyNotes: Record<string, StickyNote>; reminders: Record<string, Reminder> }
+export const emptyWorkspace = (): WorkspaceData => ({ folderIcons: {}, documents: {}, importantLinks: {}, mindMaps: {}, stickyNotes: {}, reminders: {} })
 export type WorkspaceAction =
-  | { type: 'docSave'; id: string; title: string; category: DocumentEntry['category']; files?: NewFile[] }
+  | { type: 'docSave'; id: string; title: string; category: DocumentEntry['category']; icon?: string; files?: NewFile[] }
+  | { type: 'folderIconSave'; category: keyof typeof CATEGORIES; icon: string }
   | { type: 'docDelete'; id: string }
   | { type: 'linkSave'; link: Omit<ImportantLink, 'updatedAt'> }
   | { type: 'linkDelete'; id: string }
@@ -22,12 +25,12 @@ export type WorkspaceAction =
   | { type: 'reminderSave'; reminder: Pick<Reminder, 'id' | 'title' | 'description' | 'dueAt' | 'status'> }
   | { type: 'reminderDelete'; id: string }
   | { type: 'sysReminders'; now: string }
-export const WORKSPACE_ACTIONS = new Set(['docSave', 'docDelete', 'linkSave', 'linkDelete', 'mapSave', 'noteSave', 'noteDelete', 'reminderSave', 'reminderDelete', 'sysReminders'])
-export const managesLibrary = (u: User) => u.status === 'active' && ['ceo', 'control'].includes(u.role)
+export const WORKSPACE_ACTIONS = new Set(['folderIconSave', 'docSave', 'docDelete', 'linkSave', 'linkDelete', 'mapSave', 'noteSave', 'noteDelete', 'reminderSave', 'reminderDelete', 'sysReminders'])
+export const managesLibrary = (u: User) => u.status === 'active' && (['library.create', 'library.edit', 'library.delete'] as const).some(permission => has(u, permission))
 export function editsMap(s: State, u: User, pid: string) {
   const p = s.projects.find((p) => p.id === pid)
   if (!p || u.status !== 'active') return false
-  return ['ceo','control'].includes(u.role) || projectPeople(p).includes(u.id) || [p.phase1TeamId, p.phase2TeamId, p.revitTeamId, ...(p.teamIds ?? [])].filter(Boolean).includes(u.teamId)
+  return ['ceo','control'].includes(u.role) || projectPeople(p).includes(u.id) || [p.phase1TeamId, p.phase2TeamId, ...(p.teamIds ?? [])].filter(Boolean).includes(u.teamId)
 }
 const text = (x: unknown, max: number, required = false): x is string => typeof x === 'string' && x.length <= max && (!required || !!x.trim())
 const validId = (x: unknown): x is string => typeof x === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(x) && !['__proto__', 'constructor', 'prototype'].includes(x)
@@ -38,56 +41,63 @@ export function safeAddress(kind: string, address: string) {
 }
 export function workspaceGuard(s: State, raw: unknown): string | null {
   const a = raw as WorkspaceAction
-  if (a.type === 'sysReminders') return s.session === null && date(a.now) ? null : 'این عملیات مختص سرور است.'
+  if (a.type === 'sysReminders') return s.session === null && date(a.now) ? null : "This operation is dedicated to the server."
   const me = s.users.find((u) => u.id === s.session)
-  if (!me || me.status !== 'active') return 'حساب فعال لازم است.'
-  if (['docSave', 'docDelete', 'linkSave', 'linkDelete'].includes(a.type) && !managesLibrary(me)) return 'مدیریت این بخش فقط برای مدیرعامل و کنترل پروژه است.'
-  const invalid = 'اطلاعات واردشده معتبر نیست.'
+  if (!me || me.status !== 'active') return "An active account is required."
+  if (a.type === 'docSave' || a.type === 'linkSave') {
+    const exists = a.type === 'docSave' ? s.documents[a.id] : s.importantLinks[a.link?.id]
+    if (!has(me, exists ? 'library.edit' : 'library.create')) return "The license is required in the library."
+  }
+  if ((a.type === 'docDelete' || a.type === 'linkDelete') && !has(me, 'library.delete')) return "It is necessary to remove the license from the library."
+  if (a.type === 'folderIconSave' && !has(me, 'library.edit')) return "Library editing permission is required."
+  const invalid = "The entered information is not valid."
   switch (a.type) {
+    case 'folderIconSave': return Object.hasOwn(CATEGORIES, a.category) && validIcon(a.icon) ? null : invalid
     case 'docDelete': return validId(a.id) && !!s.documents[a.id] ? null : invalid
     case 'docSave': {
-      if (!validId(a.id) || !text(a.title, 200, true) || !Object.hasOwn(CATEGORIES, a.category)) return invalid
+      if (!validId(a.id) || !text(a.title, 200, true) || !Object.hasOwn(CATEGORIES, a.category) || (a.icon !== undefined && !validIcon(a.icon))) return invalid
       if (a.files !== undefined && (!Array.isArray(a.files) || a.files.length !== 1)) return invalid
       const f = a.files?.[0] ?? s.documents[a.id]?.file
-      return f && text(f.name, 200, true) && text(f.mime, 100, true) && Number.isFinite(f.size) && f.size > 0 && f.size <= 3 * 1024 * 1024 && text(f.dataUrl, 5 * 1024 * 1024, true) && /^(data:|\/api\/files\/fl-)/.test(f.dataUrl) ? null : 'یک فایل معتبر با حجم حداکثر ۳ مگابایت انتخاب کنید.'
+      return f && text(f.name, 200, true) && text(f.mime, 100, true) && Number.isFinite(f.size) && f.size > 0 && f.size <= 3 * 1024 * 1024 && text(f.dataUrl, 5 * 1024 * 1024, true) && /^(data:|\/api\/files\/fl-)/.test(f.dataUrl) ? null : "Choose a valid file with a maximum volume of 3 MB."
     }
     case 'linkDelete': return validId(a.id) && !!s.importantLinks[a.id] ? null : invalid
     case 'linkSave': {
       const l = a.link
-      return l && validId(l.id) && text(l.title, 200, true) && text(l.address, 2000, true) && safeAddress(l.kind, l.address) && text(l.description, 2000) && ['globe', 'building', 'book', 'mail', 'folder', 'link'].includes(l.icon) ? null : invalid
+      return l && validId(l.id) && text(l.title, 200, true) && text(l.address, 2000, true) && safeAddress(l.kind, l.address) && text(l.description, 2000) && validIcon(l.icon) ? null : invalid
     }
     case 'mapSave': {
-      if (!editsMap(s, me, a.projectId)) return 'ویرایش نقشه فقط برای اعضا و مسئولان همین پروژه است.'
-      if (a.revision !== (s.mindMaps[a.projectId]?.revision ?? 0)) return 'نقشه توسط همکار دیگری تغییر کرده است؛ نسخهٔ تازه را بارگذاری کنید.'
+      if (!editsMap(s, me, a.projectId)) return "The map is only for the members and officials of this project."
+      if (a.revision !== (s.mindMaps[a.projectId]?.revision ?? 0)) return "The map has been changed by another colleague; upload the new version."
       if (!Array.isArray(a.nodes) || !Array.isArray(a.edges) || a.nodes.length > 1000 || a.edges.length > 3000) return invalid
       const ids = new Set(a.nodes.map((n) => n?.id))
       if (ids.size !== a.nodes.length || a.nodes.some((n) => !n || !validId(n.id) || !text(n.title, 200, true) || !text(n.description, 5000) || !Number.isFinite(n.x) || !Number.isFinite(n.y) || Math.abs(n.x) > 100000 || Math.abs(n.y) > 100000 || (n.parentId !== null && !ids.has(n.parentId)))) return invalid
       if(a.nodes.some(n=>(n.color!==undefined&&!['PM','PD','CD','DD','IN','CA','CG','GD','MG'].includes(n.color))||(n.shape!==undefined&&!['card','pill','plain'].includes(n.shape))||(n.fontSize!==undefined&&![12,14,18].includes(n.fontSize))||(n.bold!==undefined&&typeof n.bold!=='boolean')||(n.collapsed!==undefined&&typeof n.collapsed!=='boolean')))return invalid
-      if (a.nodes.length && a.nodes.filter((n) => n.parentId === null).length !== 1) return 'نقشه باید یک گره اصلی داشته باشد.'
+      if (a.nodes.length && a.nodes.filter((n) => n.parentId === null).length !== 1) return "The map must have a main node."
       const byId = new Map(a.nodes.map((n) => [n.id, n]))
-      for (const n of a.nodes) { const seen = new Set<string>(); let cur: MindNode | undefined = n; while (cur) { if (seen.has(cur.id)) return 'رابطهٔ سلسله‌مراتبی حلقه دارد.'; seen.add(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined } }
+      for (const n of a.nodes) { const seen = new Set<string>(); let cur: MindNode | undefined = n; while (cur) { if (seen.has(cur.id)) return "It has a ring hierarchical relationship."; seen.add(cur.id); cur = cur.parentId ? byId.get(cur.parentId) : undefined } }
       if (a.edges.some((e) => !e || !ids.has(e.from) || !ids.has(e.to) || e.from === e.to) || new Set(a.edges.map((e) => `${e.from}|${e.to}`)).size !== a.edges.length) return invalid
       return null
     }
     case 'noteSave': {
       const n = a.note
       if (!n || (n.pinned !== undefined && typeof n.pinned !== 'boolean') || !validId(n.id) || !text(n.title, 200, true) || !text(n.text, 20000) || !['yellow', 'blue', 'green', 'pink', 'purple'].includes(n.color) || !['high', 'medium', 'low'].includes(n.priority) || !['active', 'completed', 'archived'].includes(n.status) || (n.reminderAt !== '' && !date(n.reminderAt))) return invalid
-      return s.stickyNotes[n.id] && s.stickyNotes[n.id].ownerId !== me.id ? 'یادداشت متعلق به شما نیست.' : null
+      return s.stickyNotes[n.id] && s.stickyNotes[n.id].ownerId !== me.id ? "Note is not yours." : null
     }
-    case 'noteDelete': return validId(a.id) && s.stickyNotes[a.id]?.ownerId === me.id ? null : 'یادداشت متعلق به شما نیست.'
+    case 'noteDelete': return validId(a.id) && s.stickyNotes[a.id]?.ownerId === me.id ? null : "Note is not yours."
     case 'reminderSave': {
       const r = a.reminder
       if (!r || !validId(r.id) || r.id.startsWith('note-') || !text(r.title, 200, true) || !text(r.description, 20000) || !date(r.dueAt) || !['active', 'completed'].includes(r.status)) return invalid
-      return s.reminders[r.id] && s.reminders[r.id].ownerId !== me.id ? 'یادآوری متعلق به شما نیست.' : null
+      return s.reminders[r.id] && s.reminders[r.id].ownerId !== me.id ? "Remembering is not yours." : null
     }
-    case 'reminderDelete': return validId(a.id) && s.reminders[a.id]?.ownerId === me.id ? null : 'یادآوری متعلق به شما نیست.'
+    case 'reminderDelete': return validId(a.id) && s.reminders[a.id]?.ownerId === me.id ? null : "Remembering is not yours."
   }
 }
 export function applyWorkspace(s: State, a: WorkspaceAction): State {
   const now = new Date().toISOString(), ownerId = s.session!
   const remove = <T,>(r: Record<string, T>, id: string) => { const next = { ...r }; delete next[id]; return next }
   switch (a.type) {
-    case 'docSave': { const old = s.documents[a.id]; return { ...s, documents: { ...s.documents, [a.id]: { id: a.id, title: a.title.trim(), category: a.category, file: a.files?.[0] ?? old.file, uploadedBy: a.files ? ownerId : old.uploadedBy, uploadedAt: a.files ? now : old.uploadedAt, updatedAt: now } } } }
+    case 'docSave': { const old = s.documents[a.id]; return { ...s, documents: { ...s.documents, [a.id]: { id: a.id, title: a.title.trim(), category: a.category, icon: a.icon ?? old?.icon, file: a.files?.[0] ?? old.file, uploadedBy: a.files ? ownerId : old.uploadedBy, uploadedAt: a.files ? now : old.uploadedAt, updatedAt: now } } } }
+    case 'folderIconSave': return { ...s, folderIcons: { ...s.folderIcons, [a.category]: a.icon } }
     case 'docDelete': return { ...s, documents: remove(s.documents, a.id) }
     case 'linkSave': return { ...s, importantLinks: { ...s.importantLinks, [a.link.id]: { ...a.link, updatedAt: now } } }
     case 'linkDelete': return { ...s, importantLinks: remove(s.importantLinks, a.id) }

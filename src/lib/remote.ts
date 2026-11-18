@@ -2,6 +2,7 @@
 // person may see, sends every change to /api/action and shows it at once (optimistically), then takes the server's
 // answer as the truth. A refusal from the server undoes the change and shows its reason.
 import { COLLECTIONS, SHAPES, applyDelta, fromView, type Collection, type Data, type Delta } from './collections'
+import { readTheme } from './preferences'
 import { reducer, type Action, type State } from './state'
 
 /** The page was served by the Taraz server (it adds this meta tag); the single-file demo has none */
@@ -11,8 +12,8 @@ export interface ServerInfo { google?: { configured: boolean; email: string | nu
 export type Phase = 'loading' | 'anon' | 'in' | 'offline'
 
 /** Actions that only change what this browser shows; they never go to the server */
-const UI_ONLY = new Set(['nav', 'openTask', 'openProfile', 'setDigits', 'setTheme'])
-type Ui = Pick<State, 'persianDigits' | 'nav' | 'openTaskId' | 'profileUserId' | 'theme' | 'profileTab' | 'denial'>
+const UI_ONLY = new Set(['nav', 'openTask', 'openProfile', 'setTheme'])
+type Ui = Pick<State, 'nav' | 'openTaskId' | 'profileUserId' | 'theme' | 'profileTab' | 'denial'>
 
 export class ApiError extends Error {
   readonly status: number
@@ -26,7 +27,7 @@ export async function api<T = Record<string, unknown>>(path: string, body?: unkn
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const data = await res.json().catch(() => ({})) as { error?: string; denial?: string }
-  if (!res.ok) throw new ApiError(res.status, data.denial ?? data.error ?? `خطای سرور (${res.status})`)
+  if (!res.ok) throw new ApiError(res.status, data.denial ?? data.error ?? `Server Error ${res.status}`)
   return data as T
 }
 
@@ -71,7 +72,8 @@ export class RemoteStore {
     try {
       const s = await api<{ me: { id: string } | null; server: ServerInfo }>('/api/session')
       this.info = s.server ?? {}
-      if (!s.me) { this.phase = 'anon'; this.refresh(); return }
+      if (!s.me) { this.ui.theme = 'system'; this.phase = 'anon'; this.refresh(); return }
+      if (this.me !== s.me.id) this.ui.theme = readTheme(s.me.id)
       this.me = s.me.id
       await this.load(true)
       this.phase = 'in'
@@ -94,7 +96,7 @@ export class RemoteStore {
     await api('/api/auth/logout', {}).catch(() => {})
     this.events?.close(); this.events = null
     this.me = null; this.token = ''; this.pending = []; this.data = emptyData()
-    this.ui = { ...this.ui, nav: { page: 'home' }, openTaskId: null, profileUserId: null }
+    this.ui = { ...this.ui, nav: { page: 'home' }, openTaskId: null, profileUserId: null, theme: 'system' }
     this.phase = 'anon'
     this.refresh()
   }
@@ -140,7 +142,7 @@ export class RemoteStore {
   dispatch = (a: Action) => {
     if (UI_ONLY.has(a.type)) {
       const s = reducer({ ...this.view }, a)
-      this.ui = { persianDigits: s.persianDigits, nav: s.nav, openTaskId: s.openTaskId, profileUserId: s.profileUserId, theme: s.theme, profileTab: s.profileTab, denial: s.denial }
+      this.ui = { nav: s.nav, openTaskId: s.openTaskId, profileUserId: s.profileUserId, theme: s.theme, profileTab: s.profileTab, denial: s.denial }
       this.refresh()
       return
     }
@@ -157,8 +159,9 @@ export class RemoteStore {
         await api('/api/action', { action: a })
         await this.load()
       } catch (e) {
-        const text = e instanceof ApiError ? e.message : 'اتصال به سرور برقرار نشد؛ تغییر ثبت نشد.'
-        this.ui = { ...this.ui, denial: { id: Date.now(), text } }
+        const text = e instanceof ApiError ? e.message : "The connection to the server was not established; the change was not recorded."
+        const title = e instanceof ApiError && e.status === 403 ? undefined : 'Could not save changes'
+        this.ui = { ...this.ui, denial: { id: Date.now(), text, title } }
         await this.load().catch(() => {})
       } finally {
         this.pending = this.pending.filter((p) => p.id !== id)

@@ -46,7 +46,7 @@ export const isFlowTask = (t: Task) => t.kind === 'supervision' || t.kind === 'i
  */
 export type FinSpace = 'finance' | 'office' | 'shared'
 export const FIN_SPACES: readonly FinSpace[] = ['finance', 'office', 'shared']
-export const FIN_SPACE_FA: Record<FinSpace, string> = { finance: 'فضای مالی', office: 'فضای اداری (مدیریتی)', shared: 'بخش اداری-مالی' }
+export const FIN_SPACE_FA: Record<FinSpace, string> = { finance: 'Finance', office: 'Administration', shared: 'Finance & Administration' }
 export const finProjectId = (s: FinSpace) => `finadmin:${s}`
 export const isFinTask = (t: Task) => t.kind === 'finadmin'
 /** Space of a finance & admin task (undefined for any other task, or a task without a valid space) */
@@ -56,7 +56,7 @@ export const activeOf = (users: User[]) => users.filter((u) => u.status === 'act
 
 /** Teams that work on a project: fixed teams, its Phase 1 and Phase 2 teams, Revit and Supervision */
 /** Teams of a project: the fixed teams (Project Control, R&D, Interior, Presentation, Render) work on every project */
-export function projectTeams(p: Project) { return [...new Set(['ctl', 'rd', 'int', 'prs', 'ren', p.phase1TeamId, p.phase2TeamId, p.revitTeamId ?? 'rvt', 'sup', ...(p.teamIds ?? [])].filter(Boolean))] }
+export function projectTeams(p: Project) { return [...new Set(['ctl', 'rd', 'int', 'prs', 'ren', p.phase1TeamId, p.phase2TeamId, 'sup', ...(p.teamIds ?? [])].filter(Boolean))] }
 
 /** Roles that see every project channel without being in a project team */
 const CHANNEL_ALL: User['role'][] = ['ceo', 'management']
@@ -88,7 +88,7 @@ export function teamOfTask(state: Pick<State, 'users'>, t: Task): string | null 
 // ---------- flow (supervision and internal tasks) ----------
 export const FLOW_ORDER: FlowState[] = ['open', 'assigned', 'in_progress', 'in_review', 'rework', 'closed']
 export const FLOW_FA: Record<FlowState, string> = {
-  open: 'ثبت‌شده', assigned: 'ارجاع‌شده', in_progress: 'در حال اجرا', in_review: 'در انتظار بررسی', rework: 'بازگشت برای اصلاح', closed: 'بسته‌شده',
+  open: 'Open', assigned: 'Assigned', in_progress: 'In Progress', in_review: 'In Review', rework: 'Rework', closed: 'Closed',
 }
 /** Progress shown for a flow state (used by roll-ups of internal projects) */
 export const FLOW_PROGRESS: Record<FlowState, number> = { open: 0, assigned: 0, in_progress: 40, in_review: 80, rework: 50, closed: 100 }

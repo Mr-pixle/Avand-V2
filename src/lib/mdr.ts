@@ -18,4 +18,4 @@ export function mdrHref(raw: string | undefined | null): string | null {
 
 export const isMdrUrl = (raw: string | undefined | null) => mdrHref(raw) !== null
 
-export const MDR_URL_HINT = 'لینک Google Sheet خود MDR این پروژه، مثل https://docs.google.com/spreadsheets/d/…/edit (اگر لینک برگه‌ی مشخصی را بدهید، همان برگه باز می‌شود).'
+export const MDR_URL_HINT = "The project’s MDR’s own Google Sheet link, such as https://docs.google.com/streamsheets/d/.../edit (if you link a given tab, the same tab will open)."

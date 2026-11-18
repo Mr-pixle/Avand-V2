@@ -12,7 +12,7 @@ export interface ScoreReport {
   ranking: ScoreRecord[]
   trend: { date: string; score: number; count: number }[]
 }
-export const SCORE_FORMULA = '۶۰ × (۱ − روزهای کاریِ تأخیر ÷ روزهای کاری از شروع واقعی تا سررسید)'
+export const SCORE_FORMULA = "60 × (1 − Delayed working days ÷ Working days from real start to deadline)"
 
 /** Fixed display scale only; never changes stored or computed scores. */
 export function scorePresentation(value:number|null|undefined){return value==null||!Number.isFinite(value)?null:{width:Math.max(0,Math.min(100,value)),tone:value>50?'green':value>=35?'yellow':'red'}}

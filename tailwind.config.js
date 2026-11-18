@@ -8,14 +8,18 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Vazirmatn", "Tahoma", "Segoe UI", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "Menlo", "monospace"],
+        sans: ["Roboto", "Anjoman", "Tahoma", "Segoe UI", "system-ui", "sans-serif"],
+        mono: ["Roboto", "Anjoman", "Segoe UI", "sans-serif"],
       },
       colors: {
         surface: "hsl(var(--surface))",
         line: "hsl(var(--line))",
-        azure: { DEFAULT: "hsl(var(--azure))", soft: "hsl(var(--azure-soft))", ink: "hsl(var(--azure-ink))" },
-        leaf: { DEFAULT: "hsl(var(--leaf))", soft: "hsl(var(--leaf-soft))", ink: "hsl(var(--leaf-ink))" },
+        azure: { DEFAULT: "hsl(var(--azure))", soft: "hsl(var(--azure-soft))", ink: "hsl(var(--azure-ink))", foreground: "hsl(var(--azure-foreground))" },
+        leaf: { DEFAULT: "hsl(var(--leaf))", soft: "hsl(var(--leaf-soft))", ink: "hsl(var(--leaf-ink))", foreground: "hsl(var(--leaf-foreground))" },
+        brand: { DEFAULT: "hsl(var(--brand))", hover: "hsl(var(--brand-hover))", ink: "hsl(var(--brand-ink))" },
+        warning: { soft: "hsl(var(--warning-soft))", ink: "hsl(var(--warning-ink))" },
+        info: { soft: "hsl(var(--info-soft))", ink: "hsl(var(--info-ink))" },
+        "elevated-alert": { soft: "hsl(var(--elevated-alert))", ink: "hsl(var(--elevated-alert-ink))" },
         "danger-soft": "hsl(var(--danger-soft))",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

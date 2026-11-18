@@ -1,3 +1,5 @@
+import { statusLabel } from '@/lib/displayLabels'
+import { TeamName } from '@/components/ItemIcon'
 import {taskPaint,taskColorStyle,projectProgressStyle,teamStatusStyle} from '@/lib/brand'
 import { useState, type ReactNode } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, Users } from 'lucide-react'
@@ -11,7 +13,7 @@ import { TODAY } from '@/lib/seed'
 
 /** Original Avand logo, kept at its natural aspect ratio in both themes. */
 export function Logo({ className }: { className?: string }) {
-  return <span role="img" aria-label="آوند Avand" className={cn('avand-logo inline-block shrink-0',className)} />
+  return <span role="img" aria-label="Avand" className={cn('avand-logo inline-block shrink-0',className)} />
 }
 
 export function ProgressRing({ value, size = 28, stroke = 3, label = true, className, task, project = false }: { task?: Task; project?: boolean; value: number; size?: number; stroke?: number; label?: boolean; className?: string }) {
@@ -22,7 +24,7 @@ export function ProgressRing({ value, size = 28, stroke = 3, label = true, class
   const {state}=useStore()
   const color=task?taskPaint(state,task):project?projectProgressStyle(v).color:v>=99.5?'hsl(var(--leaf))':'hsl(var(--azure))'
   return (
-    <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size, color }} title={`${Math.round(v)}٪`}>
+    <span className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size, color }} title={`${Math.round(v)}%`}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={project&&v===0?color:'hsl(var(--border))'} strokeWidth={stroke} />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
@@ -54,7 +56,7 @@ export function StatusPill({ status, className, task, team }: { team?:Team; stat
   return (
     <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11.5px] font-medium leading-5', cls, className)} style={palette}>
       <span className={cn('h-1.5 w-1.5 rounded-full', status.category === 'done' ? 'bg-leaf' : status.category === 'doing' ? 'bg-azure' : 'bg-muted-foreground/50')} style={palette?{backgroundColor:palette.color}:undefined} />
-      {status.name}
+      {statusLabel(status.name)}
     </span>
   )
 }
@@ -90,11 +92,11 @@ export function Assignee({ task, compact }: { task: Task; compact?: boolean }) {
     return (
       <span className="inline-flex min-w-0 items-center gap-1.5 text-foreground">
         <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-dashed border-muted-foreground/50"><Users className="h-3 w-3" /></span>
-        <span className={cn('truncate', compact && 'text-[11.5px]')}>تیم {teamById[task.assigneeTeamId]?.name}</span>
+        <span className={cn('truncate', compact && 'text-[11.5px]')}><TeamName team={teamById[task.assigneeTeamId]} /></span>
       </span>
     )
   }
-  return <span className="whitespace-nowrap text-xs text-muted-foreground">بدون تخصیص</span>
+  return <span className="whitespace-nowrap text-xs text-muted-foreground">No allocation</span>
 }
 
 export function Empty({ title, hint, icon }: { title: string; hint?: string; icon?: ReactNode }) {
@@ -107,7 +109,7 @@ export function Empty({ title, hint, icon }: { title: string; hint?: string; ico
   )
 }
 
-export function PageHeader({ eyebrow, title, children, actions }: { eyebrow?: string; title: string; children?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ eyebrow, title, children, actions }: { eyebrow?: string; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 pb-1">
       <div className="min-w-0">
@@ -153,7 +155,7 @@ export function Segmented<T extends string>({ value, onChange, options, size = '
   )
 }
 
-export function JalaliDateField({ id, value, onChange, disabled, placeholder = 'انتخاب تاریخ' }: { id?: string; value?: string; onChange: (iso?: string) => void; disabled?: boolean; placeholder?: string }) {
+export function JalaliDateField({ id, value, onChange, disabled, placeholder = "Select Date" }: { id?: string; value?: string; onChange: (iso?: string) => void; disabled?: boolean; placeholder?: string }) {
   const { d, digits } = useFmt()
   const { state } = useStore()
   const [open, setOpen] = useState(false)
@@ -174,9 +176,9 @@ export function JalaliDateField({ id, value, onChange, disabled, placeholder = '
       </PopoverTrigger>
       <PopoverContent className="w-[272px] p-3" align="start">
         <div className="mb-2 flex items-center justify-between">
-          <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => setMonth(addJMonths(month, -1))} aria-label="ماه قبل"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => setMonth(addJMonths(month, -1))} aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></button>
           <div className="text-sm font-semibold">{J_MONTHS[j.jm - 1]} {digits(j.jy)}</div>
-          <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => setMonth(addJMonths(month, 1))} aria-label="ماه بعد"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" className="rounded p-1 hover:bg-accent" onClick={() => setMonth(addJMonths(month, 1))} aria-label="Next month"><ChevronRight className="h-4 w-4" /></button>
         </div>
         <div className="grid grid-cols-7 gap-0.5 text-center text-[11px] text-muted-foreground">
           {WEEKDAYS_SHORT.map((w) => <div key={w} className="py-1">{w}</div>)}
@@ -197,8 +199,8 @@ export function JalaliDateField({ id, value, onChange, disabled, placeholder = '
           })}
         </div>
         <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
-          <button type="button" className="text-azure hover:underline" onClick={() => { onChange(TODAY); setOpen(false) }}>امروز</button>
-          {value && <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => { onChange(undefined); setOpen(false) }}>پاک کردن</button>}
+          <button type="button" className="text-azure hover:underline" onClick={() => { onChange(TODAY); setOpen(false) }}>Today</button>
+          {value && <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => { onChange(undefined); setOpen(false) }}>Clear</button>}
         </div>
       </PopoverContent>
     </Popover>

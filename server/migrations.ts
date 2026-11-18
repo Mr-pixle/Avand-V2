@@ -29,7 +29,7 @@ export function upgradeOrganization(data: Data): Data {
     if (t.workScope || (t.kind !== 'document' && t.kind !== 'manual')) return [id, t]
     const teamId = t.assigneeTeamId ?? data.users.find((u) => u.id === t.assigneeUserId)?.teamId
     const kind = data.teams.find((tm) => tm.id === teamId)?.kind
-    const scope: WorkScope | undefined = kind === 'revit' ? 'revit' : taskScope(data.tasks, t) ?? (kind === 'phase1' || kind === 'phase2' ? kind : undefined)
+    const scope: WorkScope | undefined = kind === 'revit' ? 'phase2' : taskScope(data.tasks, t) ?? (kind === 'phase1' || kind === 'phase2' ? kind : undefined)
     return [id, scope ? { ...t, workScope: scope } : t]
   }))
   return { ...data, projects, tasks }
@@ -70,4 +70,23 @@ export async function migrateStages(db: Db) {
 
 export async function migrateAvandTeams(db: Db) {
  await tx(db,async c=>{await c.query('SELECT pg_advisory_xact_lock(20261109, 1)');if(await getMeta(c,'20261109_avand_teams'))return;const before=await loadData(c);const after={...before,teams:standardTeams(before.teams)};await writeChanges(c,diffData(before,after));await setMeta(c,'20261109_avand_teams',{appliedAt:new Date().toISOString()})})
+}
+
+/** Fold the former Revit slot into Phase 2 without touching task assignees or work history. */
+export async function migratePhase2Team(db: Db) {
+  await tx(db, async (c) => {
+    const key = '20261114_phase2_team'
+    await c.query('SELECT pg_advisory_xact_lock(20261114, 1)')
+    if (await getMeta(c, key)) return
+    const data = await loadData(c)
+    const projects = data.projects.map((project) => {
+      const { revitTeamId, ...rest } = project
+      const phase2TeamId = project.phase2TeamId || revitTeamId || ''
+      const teams = project.teamIds?.filter((id) => id !== revitTeamId && data.teams.find(team => team.id === id)?.kind !== 'revit')
+      return { ...rest, phase2TeamId, staffing: staffingOf({ ...project, phase2TeamId }, data.users), teamIds: teams }
+    })
+    const tasks = Object.fromEntries(Object.entries(data.tasks).map(([id, task]) => [id, task.workScope === 'revit' ? { ...task, workScope: 'phase2' as const } : task]))
+    await writeChanges(c, diffData(data, { ...data, projects, tasks }))
+    await setMeta(c, key, { appliedAt: new Date().toISOString() })
+  })
 }

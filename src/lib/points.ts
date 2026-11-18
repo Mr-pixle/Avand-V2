@@ -4,7 +4,7 @@ import type { PointConfig } from './types'
 
 export const DEFAULT_POINT_CONFIG: Omit<PointConfig, 'by' | 'at'> = {
   version: 1, multiplier: 100, hoursPerDay: 8, earlyFactor: 1, lateFactor: 1, cap: null,
-  reason: 'فرمول پایه: (W.F ÷ Estimation) × ۱۰۰ × نفرساعت تعجیل یا تأخیر؛ روز کاری × ۸ ساعت',
+  reason: "Basic formula: (W.F ÷ Estimation) × 100 × Hour of acceleration or delay; working day × 8 hours",
 }
 
 /** Working days d with from < d ≤ to (Saturday–Wednesday, official holidays excluded) */

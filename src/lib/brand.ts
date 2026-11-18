@@ -26,6 +26,9 @@ export const TEAM_COLORS = Object.fromEntries(Object.entries(TEAM_REFERENCE_COLO
 export function teamStatusTone(code:TeamCode,progress:number,dark=false){const base=dark?mix(TEAM_REFERENCE_COLORS[code],'#000000',.04):TEAM_COLORS[code];return mix('#FFFFFF',base,.3+.7*Math.max(0,Math.min(100,progress))/100)}
 export function themePaint(light:string,dark:string){return `light-dark(${light}, ${dark})`}
 export function teamStatusStyle(team:Team|undefined,progress=100){const code=teamCode(team),l=teamStatusTone(code,progress),d=teamStatusTone(code,progress,true);return {backgroundColor:themePaint(l,d),color:themePaint(inkOn(l),inkOn(d)),borderColor:themePaint(l,d)}}
+export function teamOutline(team?: Team, code = teamCode(team)) {
+  return { borderColor: themePaint(TEAM_COLORS[code], TEAM_REFERENCE_COLORS[code]) }
+}
 export function taskColor(s:State,t:Task,statusId?:string,dark=false) {
   const team=s.teams.find(x=>x.id===teamOfTask(s,t)),code=teamCode(team)
   if(isFlowTask(t)) {

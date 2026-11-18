@@ -20,7 +20,7 @@ export function loadServiceAccount(env: NodeJS.ProcessEnv): ServiceAccount | nul
   const raw = env.GOOGLE_SERVICE_ACCOUNT_JSON || (env.GOOGLE_SERVICE_ACCOUNT_FILE ? readFileSync(env.GOOGLE_SERVICE_ACCOUNT_FILE, 'utf8') : '')
   if (!raw) return null
   const sa = JSON.parse(raw) as ServiceAccount
-  if (!sa.client_email || !sa.private_key) throw new Error('فایل حساب سرویس Google باید client_email و private_key داشته باشد.')
+  if (!sa.client_email || !sa.private_key) throw new Error("The Google service account file must have client_email and private_key.")
   return sa
 }
 
@@ -42,9 +42,9 @@ export function createSheetsClient(sa: ServiceAccount, opts: { apiBase?: string;
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${head}.${claims}.${sig}` }),
       signal: AbortSignal.timeout(timeout),
-    }).catch((e) => { throw new SheetsError(`اتصال به Google برقرار نشد (${(e as Error).message}).`, 0) })
+    }).catch((e) => { throw new SheetsError(`There was no connection to Google ${(e as Error).message}.`, 0) })
     const body = await res.json().catch(() => ({})) as { access_token?: string; expires_in?: number; error_description?: string }
-    if (!res.ok || !body.access_token) throw new SheetsError(`ورود حساب سرویس Google ناموفق بود: ${body.error_description ?? res.status}`, res.status)
+    if (!res.ok || !body.access_token) throw new SheetsError(`Google account login failed: ${body.error_description ?? res.status}`, res.status)
     token = { value: body.access_token, exp: Date.now() + (body.expires_in ?? 3600) * 1000 }
     return token.value
   }
@@ -53,15 +53,15 @@ export function createSheetsClient(sa: ServiceAccount, opts: { apiBase?: string;
     const res = await fetch(`${api}${path}`, {
       ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${await accessToken()}`, 'content-type': 'application/json' },
       signal: AbortSignal.timeout(timeout),
-    }).catch((e) => { throw new SheetsError(`اتصال به Google Sheets برقرار نشد (${(e as Error).message}).`, 0) })
+    }).catch((e) => { throw new SheetsError(`There was no connection to Google Sheets ${(e as Error).message}.`, 0) })
     const body = await res.json().catch(() => ({})) as { error?: { message?: string } } & Record<string, unknown>
     if (!res.ok) {
       const msg = body.error?.message ?? ''
-      if (res.status === 403) throw new SheetsError(`حساب سرویس به این Google Sheet دسترسی ندارد؛ MDR را با ${sa.client_email} (Editor) به اشتراک بگذارید.`, 403)
-      if (res.status === 404) throw new SheetsError('این Google Sheet پیدا نشد؛ لینک MDR پروژه را بررسی کنید.', 404)
-      if (res.status === 400 && /parse range|Unable to parse/i.test(msg)) throw new SheetsError('Tab تعیین‌شده برای MDR در این Google Sheet نیست.', 400)
-      if (res.status === 429) throw new SheetsError('سهمیه‌ی Google Sheets موقتاً پر است؛ کمی بعد دوباره امتحان می‌شود.', 429)
-      throw new SheetsError(`Google Sheets خطا داد (${res.status}): ${msg}`, res.status)
+      if (res.status === 403) throw new SheetsError(`The service account does not have access to this Google Sheet; share the MDR with ${sa.client_email} (Editor).`, 403)
+      if (res.status === 404) throw new SheetsError("This Google Sheet was not found; check out the MDR link of the project.", 404)
+      if (res.status === 400 && /parse range|Unable to parse/i.test(msg)) throw new SheetsError("Tab is not set for MDR in this Google Sheet.", 400)
+      if (res.status === 429) throw new SheetsError("The Google Sheets quota is temporarily full; a little later it will be tried again.", 429)
+      throw new SheetsError(`Google Sheets error (${res.status}): ${msg}`, res.status)
     }
     return body
   }

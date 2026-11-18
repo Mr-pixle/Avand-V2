@@ -9,11 +9,11 @@ import type { SyncItem } from '@/lib/types'
 import { Empty, PageHeader, Segmented } from '@/components/common'
 
 const KIND: Record<SyncItem['kind'], { label: string; cls: string }> = {
-  new: { label: 'جدید', cls: 'bg-azure-soft text-azure-ink' },
-  changed: { label: 'تغییر', cls: 'bg-secondary text-foreground ring-1 ring-border' },
-  removed: { label: 'حذف از MDR', cls: 'bg-danger-soft text-destructive' },
+  new: { label: "New", cls: 'bg-azure-soft text-azure-ink' },
+  changed: { label: "Change", cls: 'bg-secondary text-foreground ring-1 ring-border' },
+  removed: { label: "Remove from MDR", cls: 'bg-danger-soft text-destructive' },
 }
-const FIELD: Record<string, string> = { name: 'Sheets Name', weight: 'Weight', floor: 'Floor', parent: 'جابه‌جایی (Parent)', package: 'Package' }
+const FIELD: Record<string, string> = { name: 'Sheets Name', weight: 'Weight', floor: 'Floor', parent: "Moving (part)", package: 'Package' }
 const ROWKIND: Record<string, string> = { doctype: 'Doc Type', document: 'Document', group: 'Group', stage: 'Stage', phase: 'Phase' }
 
 export function SyncReview() {
@@ -37,25 +37,25 @@ export function SyncReview() {
     if (!ids.length) return
     dispatch({ type: 'review', ids, approve })
     setSel(new Set())
-    toast.success(approve ? `${n(ids.length)} ردیف تأیید شد` : `${n(ids.length)} ردیف رد شد`, {
-      description: approve ? 'تسک‌های جدید در استخر Unassigned قرار گرفتند؛ تغییرات روی تسک‌ها اعمال شد.' : 'این ردیف‌ها در اجرای بعدی Sync دوباره پیشنهاد نمی‌شوند مگر MDR تغییر کند.',
+    toast.success(approve ? `${n(ids.length)} Row confirmed` : `${n(ids.length)} Row Rejected`, {
+      description: approve ? "The new Tasks were placed in the Unassigned Pool; changes were made to the Tasks." : "These rows will not be rescheduled in the next Sync run unless the MDR changes.",
     })
   }
   const pendingCount = state.syncItems.filter((x) => x.state === 'pending').length
 
   return (
     <div className="flex flex-col gap-5 pb-16">
-      <PageHeader eyebrow="Sync با MDR" title="صف Sync Review" actions={
+      <PageHeader eyebrow="Sync with MDR" title="Sync Review" actions={
         <Segmented value={tab} onChange={(v) => { setTab(v); setSel(new Set()) }} options={[
-          { value: 'pending', label: <>در انتظار <span className="num">{n(pendingCount)}</span></> },
-          { value: 'done', label: 'بررسی‌شده' },
+          { value: 'pending', label: <>Pending <span className="num">{n(pendingCount)}</span></> },
+          { value: 'done', label: "Checked" },
         ]} />
       }>
-        سطرهای جدید MDR مستقیم تسک نمی‌شوند. کنترل پروژه هر شاخه را یک‌جا تأیید می‌کند. سطر حذف‌شده فقط علامت «Removed from MDR» می‌گیرد.
+        The new MDR rows do not move directly. Project control confirms each branch in one place. The deleted row only takes the &quot;Removed from MDR&quot; sign.
       </PageHeader>
 
       {groups.length === 0 ? (
-        <Empty icon={<CheckCheck className="h-6 w-6" />} title={tab === 'pending' ? 'صف خالی است' : 'هنوز ردیفی بررسی نشده'} hint={tab === 'pending' ? 'همه‌ی تغییرات MDR بررسی شده‌اند. اجرای بعدی Sync موارد تازه را اینجا می‌آورد.' : undefined} />
+        <Empty icon={<CheckCheck className="h-6 w-6" />} title={tab === 'pending' ? "The line is empty" : "There are no reviews yet"} hint={tab === 'pending' ? "All MDR changes have been reviewed. Sync's next run brings new ones here." : undefined} />
       ) : groups.map(([key, g]) => {
         const ids = g.items.map((x) => x.id)
         const all = ids.every((id) => sel.has(id))
@@ -64,20 +64,20 @@ export function SyncReview() {
         return (
           <section key={key} className="overflow-hidden glass-card">
             <header className="flex flex-wrap items-center gap-3 border-b bg-foreground/[0.03] px-4 py-2.5">
-              {tab === 'pending' && can.syncProject(g.projectId) && <Checkbox id={`br-${key}`} checked={all ? true : some ? 'indeterminate' : false} onCheckedChange={(v) => toggle(ids, !!v)} aria-label="انتخاب کل شاخه" />}
+              {tab === 'pending' && can.syncProject(g.projectId) && <Checkbox id={`br-${key}`} checked={all ? true : some ? 'indeterminate' : false} onCheckedChange={(v) => toggle(ids, !!v)} aria-label="Select the entire branch" />}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><FileSpreadsheet className="h-3.5 w-3.5" /> {projectById[g.projectId]?.name}</div>
                 <div className="truncate font-semibold">{g.branch.join(' › ')}</div>
               </div>
               <div className="num flex gap-3 text-[12px] text-muted-foreground">
-                {counts.new > 0 && <span>{n(counts.new)} جدید</span>}
-                {counts.changed > 0 && <span>{n(counts.changed)} تغییر</span>}
-                {counts.removed > 0 && <span>{n(counts.removed)} حذف</span>}
+                {counts.new > 0 && <span>{n(counts.new)} New</span>}
+                {counts.changed > 0 && <span>{n(counts.changed)} Change</span>}
+                {counts.removed > 0 && <span>{n(counts.removed)} Delete</span>}
               </div>
               {tab === 'pending' && can.syncProject(g.projectId) && (
                 <div className="flex gap-1.5">
-                  <Button size="sm" onClick={() => act(ids, true)}><Check className="h-3.5 w-3.5" /> تأیید شاخه</Button>
-                  <Button size="sm" variant="ghost" onClick={() => act(ids, false)}>رد</Button>
+                  <Button size="sm" onClick={() => act(ids, true)}><Check className="h-3.5 w-3.5" /> Branch verification</Button>
+                  <Button size="sm" variant="ghost" onClick={() => act(ids, false)}>Red</Button>
                 </div>
               )}
             </header>
@@ -87,13 +87,13 @@ export function SyncReview() {
                 const isChildOfNew = it.task?.parentId && g.items.some((x) => x.task?.id === it.task?.parentId)
                 return (
                   <li key={it.id} className={cn('flex items-start gap-3 px-4 py-2.5', sel.has(it.id) && 'bg-azure-soft/40')}>
-                    {tab === 'pending' && can.syncProject(g.projectId) && <Checkbox id={`it-${it.id}`} className="mt-1" checked={sel.has(it.id)} onCheckedChange={(v) => toggle([it.id], !!v)} aria-label="انتخاب ردیف" />}
+                    {tab === 'pending' && can.syncProject(g.projectId) && <Checkbox id={`it-${it.id}`} className="mt-1" checked={sel.has(it.id)} onCheckedChange={(v) => toggle([it.id], !!v)} aria-label="Select Row" />}
                     <div className={cn('min-w-0 flex-1', isChildOfNew && 'ps-5')}>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', KIND[it.kind].cls)}>{KIND[it.kind].label}</span>
-                        <span className="text-[11px] text-muted-foreground">{ROWKIND[t?.kind ?? ''] ?? ''}، ردیف <span className="num">{n(it.row)}</span></span>
+                        <span className="text-[11px] text-muted-foreground">{ROWKIND[t?.kind ?? ''] ?? ''}the Row <span className="num">{n(it.row)}</span></span>
                         {t?.docNumber && <span className="mono text-[11.5px] text-muted-foreground">{t.docNumber}</span>}
-                        {it.state !== 'pending' && <span className={cn('rounded px-1.5 py-0.5 text-[11px]', it.state === 'approved' ? 'bg-leaf-soft text-leaf-ink' : 'bg-secondary text-muted-foreground')}>{it.state === 'approved' ? 'تأیید شد' : 'رد شد'}</span>}
+                        {it.state !== 'pending' && <span className={cn('rounded px-1.5 py-0.5 text-[11px]', it.state === 'approved' ? 'bg-leaf-soft text-leaf-ink' : 'bg-secondary text-muted-foreground')}>{it.state === 'approved' ? "Approved" : "Passed"}</span>}
                       </div>
                       <div className="mt-0.5 font-medium">{t?.name}</div>
                       {it.kind === 'new' && t?.kind === 'document' && (
@@ -107,7 +107,7 @@ export function SyncReview() {
                           <span className="rounded bg-leaf-soft px-1 text-leaf-ink">{c.to}</span>
                         </div>
                       ))}
-                      {it.kind === 'removed' && <div className="mt-1 text-[12.5px] text-muted-foreground">این سطر دیگر در MDR نیست. با تأیید، تسک حذف نمی‌شود و فقط علامت «Removed from MDR» می‌گیرد.</div>}
+                      {it.kind === 'removed' && <div className="mt-1 text-[12.5px] text-muted-foreground">This line is no longer in the MDR. With confirmation, the task is not removed and only gets the sign &quot;Removed from MDR&quot;.</div>}
                       {it.warnings?.map((w, i) => (
                         <div key={i} className="mt-1.5 flex items-start gap-1.5 rounded bg-azure-soft px-2 py-1 text-[12px] text-azure-ink"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {w}</div>
                       ))}
@@ -123,10 +123,10 @@ export function SyncReview() {
       {sel.size > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))', paddingRight: 'max(16px, env(safe-area-inset-right, 0px))' }}>
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 py-3">
-            <span className="num text-[13px]">{n(sel.size)} ردیف انتخاب شده</span>
+            <span className="num text-[13px]">{n(sel.size)} Selected Row</span>
             <div className="flex gap-2">
-              <Button onClick={() => act([...sel], true)}><Check className="h-4 w-4" /> تأیید انتخاب‌شده‌ها</Button>
-              <Button variant="outline" onClick={() => act([...sel], false)}><X className="h-4 w-4" /> رد</Button>
+              <Button onClick={() => act([...sel], true)}><Check className="h-4 w-4" /> Approvals selected</Button>
+              <Button variant="outline" onClick={() => act([...sel], false)}><X className="h-4 w-4" /> Red</Button>
             </div>
           </div>
         </div>

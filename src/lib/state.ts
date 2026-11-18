@@ -1,4 +1,6 @@
 import { emptyOffice, applyOffice, OFFICE_ACTIONS, type OfficeData, type OfficeAction } from './office'
+import { applyRoleAction, resolveRole, type RoleAction, type RoleDefinition } from './accessRoles'
+import { applyWhiteboard, type WhiteboardAction } from './whiteboards'
 import { emptyWorkspace, applyWorkspace, WORKSPACE_ACTIONS, type WorkspaceData, type WorkspaceAction } from './workspace'
 // Pure application state: types, actions and the guarded reducer. Shared by the browser and the server — no React, DOM or storage here.
 import { buildSeed, TODAY } from './seed'
@@ -17,20 +19,21 @@ import {
 import { activeOf, channelMembers, effectiveScope, finSpaceOf, flowOf, isFinTask, isFlowTask, isWorkItem, parentScopeOf, parseMentions, statusesFor, statusOf, FIN_SPACE_FA, FLOW_FA, type FinSpace } from './domain'
 import { AUDIT_FIELD } from './taskFields'
 import type { ScoreRecord } from './scores'
-import { canViewTask, guard } from './policy'
+import { canViewTask, guard, has } from './policy'
 
-export type Page = 'home' | 'projects' | 'project' | 'workload' | 'review' | 'runs' | 'admin' | 'notifications' | 'pchat' | 'chat' | 'team' | 'supervision' | 'points'
+export type Page = 'settings' | 'home' | 'projects' | 'project' | 'workload' | 'review' | 'runs' | 'admin' | 'notifications' | 'pchat' | 'chat' | 'team' | 'supervision' | 'points'
   | 'documents' | 'links' | 'requests' | 'timesheet' | 'inbox' | 'adminreports' | 'personal' | 'finadmin'
 /** Pages of the Project Control section: CEO and Project Control only */
 export const CONTROL_PAGES: Page[] = ['workload', 'review', 'runs', 'points', 'admin']
-export interface Nav { page: Page; projectId?: string; channelId?: string; teamId?: string; date?: string; userId?: string; requestId?: string; space?: FinSpace }
+export interface Nav { page: Page; projectId?: string; channelId?: string; teamId?: string; date?: string; userId?: string; requestId?: string; space?: FinSpace; tab?: string; taskView?: string }
 
 export interface State extends WorkspaceData, OfficeData {
   teams: Team[]; users: User[]; projects: Project[]; tasks: Record<string, Task>
   statusSets: Record<string, Status[]>; allocations: Allocation[]; holidays: Holiday[]; leaves: Leave[]
   syncItems: SyncItem[]; syncRuns: SyncRun[]; audit: AuditEntry[]; writeQueue: WriteBackItem[]
   comments: Comment[]; messages: ChatMessage[]; notifications: Notification[]; lastRead: Record<string, string>
-  session: string | null; persianDigits: boolean; nav: Nav; openTaskId: string | null; profileUserId: string | null
+  roleDefinitions: Record<string, RoleDefinition>; whiteboards: Record<string, import('./whiteboards').Whiteboard>
+  session: string | null; nav: Nav; openTaskId: string | null; profileUserId: string | null
   theme: ThemeChoice
   internalProjects: InternalProject[]; reviewRounds: ReviewRound[]; attachments: Attachment[]
   scores?: Record<string, ScoreRecord>; pointEntries: PointEntry[]; pointConfigs: PointConfig[]
@@ -40,7 +43,7 @@ export interface State extends WorkspaceData, OfficeData {
   personalTasks: Record<string, PersonalTask>; personalBoards: Record<string, PersonalBoard>
   profileTab: 'profile' | 'points'
   /** Last refused action — shown as a toast; the refusal itself is also in the AuditLog */
-  denial: { id: number; text: string } | null
+  denial: { id: number; text: string; title?: string } | null
 }
 
 export type NewFile = { name: string; mime: string; size: number; dataUrl: string }
@@ -50,10 +53,10 @@ export type ThemeChoice = 'system' | 'light' | 'dark'
 
 export const WRITEBACK_DELAY_SEC = 120
 
-export type Action = OfficeAction | WorkspaceAction
+export type Action = RoleAction | WhiteboardAction | OfficeAction | WorkspaceAction
   | { type: 'classifyTasks'; ids: string[]; projectStage: ProjectStage; workScope?: WorkScope }
   | { type: 'teamAdd'; team: Team }
-  | { type: 'teamUpdate'; id: string; patch: Pick<Team, 'name' | 'kind'> }
+  | { type: 'teamUpdate'; id: string; patch: Pick<Team, 'name' | 'kind' | 'icon'> }
   | { type: 'teamArchive'; id: string; archived: boolean }
   | { type: 'teamMember'; userId: string; teamId: string }
   | { type: 'login'; id: string }
@@ -64,9 +67,8 @@ export type Action = OfficeAction | WorkspaceAction
   | { type: 'addUser'; user: User }
   | { type: 'updateUser'; id: string; patch: Partial<User> }
   | { type: 'openProfile'; id: string | null; tab?: 'profile' | 'points' }
-  | { type: 'setDigits'; on: boolean }
   | { type: 'setTheme'; theme: ThemeChoice }
-  | { type: 'nav'; nav: Nav }
+  | { type: 'nav'; nav: Nav; fromHistory?: boolean }
   | { type: 'openTask'; id: string | null }
   | { type: 'setStatus'; taskId: string; statusId: string }
   | { type: 'savePlan'; taskId: string; assignee: Resource | null; estimation?: number; start?: string; due?: string; allocations: Allocation[] }
@@ -106,6 +108,7 @@ export type Action = OfficeAction | WorkspaceAction
   | { type: 'pointAdjust'; userId: string; points: number; reason: string; taskId?: string }
   | { type: 'pointConfig'; config: Pick<PointConfig, 'multiplier' | 'hoursPerDay' | 'earlyFactor' | 'lateFactor' | 'cap'>; reason: string }
   | { type: 'reqCreate'; req: NewRequest; files?: NewFile[] }
+  | { type: 'reqItUpdate'; id: string; status: 'it_in_progress' | 'it_resolved'; note?: string }
   | { type: 'reqDecide'; id: string; decision: 'approve' | 'reject'; note?: string; minutes?: number }
   | { type: 'reqWithdraw'; id: string }
   | { type: 'reqCancel'; id: string; note: string }
@@ -124,6 +127,7 @@ export type NewRequest =
   | { kind: 'leave'; description: string; leave: LeaveDetails }
   | { kind: 'overtime'; description: string; overtime: { date: string; minutes: number; taskIds: string[] } }
   | { kind: 'other'; description: string; other: OtherDetails }
+  | { kind: 'it'; description: string; it: { title: string } }
 
 let seq = 100
 /** Prefix of ids made by this process. The server sets a fresh one at every start, so ids never repeat across restarts. */
@@ -171,7 +175,7 @@ export function rollupMap(state: Pick<State, 'tasks' | 'statusSets'>) {
 
 // ---------- reducer helpers ----------
 const actor = (state: State) => state.session ?? 'system'
-const nameOf = (state: State, id?: string | null) => state.users.find((u) => u.id === id)?.name ?? 'سامانه'
+const nameOf = (state: State, id?: string | null) => state.users.find((u) => u.id === id)?.name ?? "Category: Systems"
 function auditOf(state: State, kind: AuditEntry['kind'], text: string, taskId?: string): AuditEntry {
   return { id: `a-${idBase}${seq++}`, at: nowIso(), userId: actor(state), taskId, kind, text }
 }
@@ -194,7 +198,7 @@ export const fmtMinutes = (m: number) => `${Math.floor(m / 60)}:${String(m % 60)
 
 const FIELD_FA = AUDIT_FIELD
 /** What a flow task is called in notifications and AuditLog lines */
-const flowLabel = (t: Task) => (t.kind === 'supervision' ? 'مورد نظارتی' : t.kind === 'internal' ? 'تسک تیم' : t.kind === 'finadmin' ? (finSpaceOf(t) === 'office' ? 'Task اداری' : 'Task مالی') : 'تسک')
+const flowLabel = (t: Task) => (t.kind === 'supervision' ? "Surveillance Case" : t.kind === 'internal' ? "Task Team" : t.kind === 'finadmin' ? (finSpaceOf(t) === 'office' ? "Office Task" : "Financial Task") : "Task")
 /** The CEO coordinates the Finance & Administration space */
 const ceoIds = (state: State) => activeOf(state.users).filter((u) => u.role === 'ceo').map((u) => u.id)
 function mkAttachment(state: State, taskId: string, f: NewFile, roundId?: string): Attachment {
@@ -224,33 +228,33 @@ function applyFlow(state: State, a: Extract<Action, { type: 'flow' }>): State {
     case 'assign': {
       nt.assigneeUserId = a.assigneeId
       setFlow(flowOf(t) === 'rework' ? 'rework' : flowOf(t) === 'in_progress' ? 'in_progress' : 'assigned')
-      audit.push(auditOf(state, 'allocation', `ارجاع به ${nameOf(state, a.assigneeId)}`, t.id))
-      n = notify(state, [a.assigneeId], { kind: 'assign', title: `${label} «${t.name}» به شما ارجاع شد`, body: note || undefined, link })
+      audit.push(auditOf(state, 'allocation', `Reference to ${nameOf(state, a.assigneeId)}`, t.id))
+      n = notify(state, [a.assigneeId], { kind: 'assign', title: `${label} «${t.name}» was assigned to you`, body: note || undefined, link })
       break
     }
     case 'start': {
       setFlow('in_progress')
-      if (!t.actualStart) { nt.actualStart = TODAY; audit.push(auditOf(state, 'actual', `Actual Start ثبت شد: ${jalaliFa(TODAY)}`, t.id)) }
-      n = notify(state, [t.reviewerId ?? t.reporterId], { kind: 'status', title: `${nameOf(state, me)} کار «${t.name}» را ${flowOf(t) === 'rework' ? 'برای اصلاح' : ''} شروع کرد`, link })
+      if (!t.actualStart) { nt.actualStart = TODAY; audit.push(auditOf(state, 'actual', `Indeed Start was registered: ${jalaliFa(TODAY)}`, t.id)) }
+      n = notify(state, [t.reviewerId ?? t.reporterId], { kind: 'status', title: `${nameOf(state, me)} started working " ${t.name} " ${flowOf(t) === 'rework' ? "for correction" : ''}`, link })
       break
     }
     case 'submit': {
       const round: ReviewRound = { id: `r-${idBase}${seq++}`, taskId: t.id, round: prevRounds.length + 1, submittedBy: me, submittedAt: nowIso(), note }
       rounds = [...rounds, round]
       files = (a.files ?? []).map((f) => mkAttachment(state, t.id, f, round.id))
-      if (!t.actualStart) { nt.actualStart = TODAY; audit.push(auditOf(state, 'actual', `Actual Start ثبت شد: ${jalaliFa(TODAY)}`, t.id)) }
+      if (!t.actualStart) { nt.actualStart = TODAY; audit.push(auditOf(state, 'actual', `Indeed Start was registered: ${jalaliFa(TODAY)}`, t.id)) }
       setFlow('in_review')
-      if (!isFlowTask(t)) audit.push(auditOf(state, 'review', `ارسال برای بررسی (دور ${round.round}): ${note}`, t.id))
+      if (!isFlowTask(t)) audit.push(auditOf(state, 'review', `Send for review ${round.round}: ${note}`, t.id))
       const deciders = t.reviewerId ? [t.reviewerId] : activeOf(state.users).filter((u) => u.teamId === t.teamSpaceId && u.role === 'lead').map((u) => u.id)
-      n = notify(state, deciders, { kind: 'review', title: `«${t.name}» برای بررسی ارسال شد (دور ${round.round})`, body: note, link })
+      n = notify(state, deciders, { kind: 'review', title: `«${t.name}» was submitted for review (round ${round.round})`, body: note, link })
       break
     }
     case 'complete': {
       setFlow('closed')
       nt.actualStart = t.actualStart ?? TODAY
       nt.actualFinish = TODAY
-      audit.push(auditOf(state, 'actual', `Actual Finish ثبت شد: ${jalaliFa(TODAY)}`, t.id))
-      n = notify(state, [t.reporterId, t.createdBy, ...(isFinTask(t) ? ceoIds(state) : [])], { kind: 'status', title: `${label} «${t.name}» بسته شد`, body: note || undefined, link })
+      audit.push(auditOf(state, 'actual', `Truly Final was registered: ${jalaliFa(TODAY)}`, t.id))
+      n = notify(state, [t.reporterId, t.createdBy, ...(isFinTask(t) ? ceoIds(state) : [])], { kind: 'status', title: `${label} «${t.name}» was closed`, body: note || undefined, link })
       break
     }
     case 'approve': {
@@ -260,14 +264,14 @@ function applyFlow(state: State, a: Extract<Action, { type: 'flow' }>): State {
         nt.flow = undefined
         next = apply({ ...state, tasks: { ...state.tasks, [t.id]: nt } }, { type: 'setStatus', taskId: t.id, statusId: done?.id ?? t.statusId ?? '' })
         nt = next.tasks[t.id]
-        audit.push(auditOf(state, 'review', `تأیید Reviewer (دور ${openRound?.round ?? 1})${note ? `: ${note}` : ''}`, t.id))
+        audit.push(auditOf(state, 'review', `Reviewer approval (round ${openRound?.round ?? 1})${note ? `: ${note}` : ''}`, t.id))
       } else {
         setFlow('closed')
         nt.actualStart = t.actualStart ?? TODAY
         nt.actualFinish = TODAY
-        audit.push(auditOf(state, 'actual', `Actual Finish ثبت شد: ${jalaliFa(TODAY)}`, t.id))
+        audit.push(auditOf(state, 'actual', `Truly Final was registered: ${jalaliFa(TODAY)}`, t.id))
       }
-      n = notify(state, [t.assigneeUserId, t.reporterId], { kind: 'review', title: `«${t.name}» تأیید و بسته شد`, body: note || undefined, link })
+      n = notify(state, [t.assigneeUserId, t.reporterId], { kind: 'review', title: `«${t.name}» was approved and closed`, body: note || undefined, link })
       break
     }
     case 'rework': {
@@ -276,20 +280,20 @@ function applyFlow(state: State, a: Extract<Action, { type: 'flow' }>): State {
         const fix = statusesFor(state, t).find((x) => x.category === 'doing' && x.name.includes('اصلاح'))
         nt.flow = 'rework'
         if (fix && fix.id !== t.statusId) { next = apply({ ...state, tasks: { ...state.tasks, [t.id]: nt } }, { type: 'setStatus', taskId: t.id, statusId: fix.id }); nt = next.tasks[t.id] }
-        audit.push(auditOf(state, 'review', `بازگشت برای اصلاح (دور ${openRound?.round ?? 1}): ${note}`, t.id))
+        audit.push(auditOf(state, 'review', `Return to Modification ${openRound?.round ?? 1}: ${note}`, t.id))
       } else setFlow('rework')
-      n = notify(state, t.assigneeUserId ? [t.assigneeUserId] : recipientsOfTask(state, t), { kind: 'review', title: `«${t.name}» برای اصلاح برگشت`, body: note, link })
+      n = notify(state, t.assigneeUserId ? [t.assigneeUserId] : recipientsOfTask(state, t), { kind: 'review', title: `«${t.name}» was returned for revisions`, body: note, link })
       break
     }
     case 'reopen': {
       setFlow('rework')
       nt.actualFinish = undefined
-      audit.push(auditOf(state, 'actual', 'تسک دوباره باز شد؛ Actual Finish پاک شد', t.id))
-      n = notify(state, [t.assigneeUserId], { kind: 'review', title: `«${t.name}» دوباره باز شد`, body: note, link })
+      audit.push(auditOf(state, 'actual', "The task was reopened and the actual finish date was cleared.", t.id))
+      n = notify(state, [t.assigneeUserId], { kind: 'review', title: `«${t.name}» was reopened`, body: note, link })
       break
     }
   }
-  const msgs = t.kind === 'supervision' && (a.op === 'approve' || a.op === 'rework') ? [sysMsg(`project:${t.projectId}`, `مورد نظارتی «${t.name}» ${a.op === 'approve' ? 'تأیید و بسته شد' : 'برای اصلاح برگشت'}.`, link)] : []
+  const msgs = t.kind === 'supervision' && (a.op === 'approve' || a.op === 'rework') ? [sysMsg(`project:${t.projectId}`, `Site supervision task “${t.name}” ${a.op === 'approve' ? 'was approved and closed' : 'was returned for revisions'}.`, link)] : []
   return {
     ...next, tasks: { ...next.tasks, [t.id]: nt }, reviewRounds: rounds, attachments: [...next.attachments, ...files],
     notifications: [...n, ...next.notifications], messages: [...next.messages, ...msgs], audit: [...audit, ...next.audit],
@@ -297,12 +301,12 @@ function applyFlow(state: State, a: Extract<Action, { type: 'flow' }>): State {
 }
 
 const ACTION_FA: Record<string, string> = {
-  setStatus: 'تغییر Status', savePlan: 'برنامه‌ریزی', addTask: 'ساخت تسک', createFlowTask: 'ساخت تسک', flow: 'گردش‌کار', updateTask: 'ویرایش تسک',
-  addAttachments: 'افزودن پیوست', setActual: 'اصلاح تاریخ واقعی', approveUser: 'تأیید عضویت', updateUser: 'ویرایش کاربر', openTask: 'مشاهده‌ی تسک',
-  logWork: 'ثبت Work Log', editWorkLog: 'ویرایش Work Log', deleteWorkLog: 'حذف Work Log',
-  reqCreate: 'ثبت درخواست اداری', reqDecide: 'تصمیم درباره‌ی درخواست', reqWithdraw: 'پس گرفتن درخواست', reqCancel: 'لغو مرخصی', tsSave: 'ثبت تایم‌شیت', tsPunch: 'ثبت ورود/خروج',
-  ptCreate: 'کار شخصی', ptUpdate: 'کار شخصی', ptDelete: 'کار شخصی', ptMove: 'کار شخصی', psSave: 'Statusهای شخصی',
-  tsUnpaid: 'اضافه‌کاری بدون پرداخت', monthClose: 'بستن ماه', tsConfig: 'قواعد تایم‌شیت', addLeave: 'ثبت مستقیم مرخصی', removeLeave: 'حذف مرخصی', addHoliday: 'ثبت تعطیلی', pointRecalc: 'بازمحاسبه‌ی امتیاز', pointAdjust: 'اصلاح امتیاز', pointConfig: 'پارامترهای امتیاز', review: 'Sync Review', addRun: 'اجرای Sync',
+  setStatus: "Change Status", savePlan: "Planning", addTask: "Create Task", createFlowTask: "Create Task", flow: "Workflow", updateTask: "Edit Task",
+  addAttachments: "Add Attachment", setActual: "Modification of Real History", approveUser: "Membership confirmation", updateUser: "Edit User", openTask: "View Task",
+  logWork: "Work Log", editWorkLog: "Edit Work Log", deleteWorkLog: "Delete Work Log",
+  reqCreate: "Registration of office application", reqDecide: "decision on the request", reqWithdraw: "Get back the request", reqCancel: "Cancel leave", tsSave: "Timesheet", tsPunch: "Log in/Out",
+  ptCreate: "Personal work", ptUpdate: "Personal work", ptDelete: "Personal work", ptMove: "Personal work", psSave: "Personal Status",
+  tsUnpaid: "Overtime without payment", monthClose: "Close the Moon", tsConfig: "Timesheet rules", addLeave: "Record Leave", removeLeave: "Removal of leave", addHoliday: "Closed Registration", pointRecalc: "Recalculation of points", pointAdjust: "Modification of points", pointConfig: "Rating parameters", review: 'Sync Review', addRun: "Run Sync",
 }
 
 /** Every write passes the permission guard first (the browser stand-in for server-side checks). Refusals change nothing but the AuditLog. */
@@ -311,7 +315,7 @@ export function reducer(state: State, a: Action): State {
   if (denied) {
     const t = 'taskId' in a ? (a as { taskId: string }).taskId : a.type === 'openTask' && a.id ? a.id : a.type === 'logWork' ? a.log.taskId
       : a.type === 'editWorkLog' || a.type === 'deleteWorkLog' ? state.workLogs.find((l) => l.id === a.id)?.taskId : undefined
-    return { ...state, denial: { id: seq++, text: denied }, audit: [auditOf(state, 'security', `رد دسترسی: ${ACTION_FA[a.type] ?? a.type} — ${denied}`, t && state.tasks[t] ? t : undefined), ...state.audit] }
+    return { ...state, denial: { id: seq++, text: denied }, audit: [auditOf(state, 'security', `Rejection Access: ${ACTION_FA[a.type] ?? a.type} — ${denied}`, t && state.tasks[t] ? t : undefined), ...state.audit] }
   }
   const next = OFFICE_ACTIONS.has(a.type) ? applyOffice(state, a as OfficeAction) : WORKSPACE_ACTIONS.has(a.type) ? applyWorkspace(state, a as WorkspaceAction) : apply(state, a as Exclude<Action, WorkspaceAction | OfficeAction>)
   if (TIMESHEET_TRIGGERS.has(a.type)) return settleTimesheets(next)
@@ -322,16 +326,16 @@ export const currentPointConfig = (s: Pick<State, 'pointConfigs'>) => s.pointCon
 
 // ---------- administrative module: requests and timesheets ----------
 export const EMPTY_CALC: TimesheetCalc = { presence: 0, breakMinutes: 0, worked: 0, duty: 0, leave: 0, offDay: false, excess: 0, requested: 0, approved: 0, pending: 0, unpaid: 0, undecided: 0, deficit: 0, configVersion: 0 }
-const faDigits = (s: string) => s.replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d])
 const roleIds = (state: State, role: Role) => activeOf(state.users).filter((u) => u.role === role).map((u) => u.id)
 export function requestSummary(r: AdminRequest, holidays: Set<string>) {
+  if (r.it) return r.it.title
   if (r.kind === 'leave' && r.leave) {
     const l = r.leave
     return l.mode === 'hour'
-      ? `${LEAVE_CAT_FA[l.category]}، ساعتی ${jalaliFa(l.from)} از ${faDigits(l.startTime ?? '')} تا ${faDigits(l.endTime ?? '')}`
-      : `${LEAVE_CAT_FA[l.category]}، ${faDigits(String(leaveDates(l, holidays).length))} روز کاری از ${jalaliFa(l.from)} تا ${jalaliFa(l.to)}`
+      ? `${LEAVE_CAT_FA[l.category]}, Hour ${jalaliFa(l.from)} From ${l.startTime ?? ''} To ${l.endTime ?? ''}`
+      : `${LEAVE_CAT_FA[l.category]}, ${String(leaveDates(l, holidays).length)} Working day from ${jalaliFa(l.from)} to ${jalaliFa(l.to)}`
   }
-  if (r.kind === 'overtime' && r.overtime) return `${faDigits(hm(r.overtime.minutes))} در ${jalaliFa(r.overtime.date)}${r.overtime.source === 'advance' ? ' (از پیش)' : ''}`
+  if (r.kind === 'overtime' && r.overtime) return `${hm(r.overtime.minutes)} on ${jalaliFa(r.overtime.date)}${r.overtime.source === 'advance' ? " (Before)" : ''}`
   return r.other?.title ?? ''
 }
 /** Leave rows for the planner, one per working day; full days take the person's daily capacity */
@@ -340,7 +344,7 @@ function leaveRowsOf(state: State, r: AdminRequest): Leave[] {
   const holidays = new Set(state.holidays.map((h) => h.date))
   const l = r.leave!
   const hours = l.mode === 'hour' ? Math.round((hourLeaveMinutes(l) / 60) * 100) / 100 : u?.capacity ?? 8
-  return leaveDates(l, holidays).map((date, i) => ({ id: `l-r${r.no}-${i + 1}`, userId: r.userId, date, hours, note: l.mode === 'hour' ? 'مرخصی ساعتی' : 'مرخصی', requestId: r.id, at: nowIso() }))
+  return leaveDates(l, holidays).map((date, i) => ({ id: `l-r${r.no}-${i + 1}`, userId: r.userId, date, hours, note: l.mode === 'hour' ? "Hour leave" : "Leave", requestId: r.id, at: nowIso() }))
 }
 function applyRequestCreate(state: State, a: Extract<Action, { type: 'reqCreate' }>): State {
   const me = state.users.find((u) => u.id === state.session)!
@@ -349,14 +353,16 @@ function applyRequestCreate(state: State, a: Extract<Action, { type: 'reqCreate'
   const steps: RequestStep[] = [{ stage: 'submit', by: me.id, at }]
   let status: AdminRequest['status'] = 'pending_office'
   const office = roleIds(state, 'office').filter((id) => id !== me.id)
-  if (me.role === 'ceo') { status = 'approved'; steps.push({ stage: 'system', by: me.id, at, decision: 'approve', note: 'درخواست مدیرعامل بدون مرحله‌ی تأیید ثبت شد' }) }
-  else if (me.role === 'office' || !office.length) { status = 'pending_ceo'; steps.push({ stage: 'system', by: 'system', at, note: me.role === 'office' ? 'درخواست مدیر اداری مستقیم به کارتابل مدیرعامل رفت' : 'مدیر اداری فعالی نیست؛ درخواست مستقیم به مدیرعامل رفت' }) }
+  if (a.req.kind === 'it') status = 'pending_it'
+  else if (me.role === 'ceo') { status = 'approved'; steps.push({ stage: 'system', by: me.id, at, decision: 'approve', note: "The CEO’s request was filed without approval." }) }
+  else if (me.role === 'office' || !office.length) { status = 'pending_ceo'; steps.push({ stage: 'system', by: 'system', at, note: me.role === 'office' ? "The manager’s request went directly to the CEO’s cartel." : "The manager is not active; the request went directly to the manager." }) }
   const q = a.req
   const r: AdminRequest = {
     id: `rq-${idBase}${seq++}`, no, userId: me.id, kind: q.kind, status, createdAt: at, stageSince: at, description: q.description.trim(), steps,
     files: (a.files ?? []).map((f) => ({ id: `rf-${idBase}${seq++}`, name: f.name, mime: f.mime, size: f.size, dataUrl: f.dataUrl, uploadedAt: at })),
   }
   if (q.kind === 'leave') r.leave = { ...q.leave, category: 'unified', to: q.leave.mode === 'hour' ? q.leave.from : q.leave.to }
+  if (q.kind === 'it') r.it = { title: q.it.title.trim() }
   if (q.kind === 'other') r.other = { ...q.other, title: q.other.title.trim() }
   if (q.kind === 'overtime') {
     const day = state.timesheets[dayKey(me.id, q.overtime.date)]
@@ -367,11 +373,11 @@ function applyRequestCreate(state: State, a: Extract<Action, { type: 'reqCreate'
   if (status === 'approved' && r.kind === 'leave') { const rows = leaveRowsOf(state, r); r.leaveIds = rows.map((x) => x.id); leaves = [...leaves, ...rows] }
   const holidays = new Set(state.holidays.map((h) => h.date))
   const sum = requestSummary(r, holidays)
-  const deciders = status === 'pending_office' ? office : status === 'pending_ceo' ? roleIds(state, 'ceo') : []
-  const n = notify(state, deciders, { kind: 'request', title: `درخواست ${KIND_FA[r.kind]} از ${me.name}`, body: sum, link: { type: 'page', page: 'inbox' } })
+  const deciders = status === 'pending_it' ? state.users.filter(user => has(user, 'requests.it')).map(user => user.id) : status === 'pending_office' ? office : status === 'pending_ceo' ? roleIds(state, 'ceo') : []
+  const n = notify(state, deciders, { kind: 'request', title: `Request ${KIND_FA[r.kind]} from ${me.name}`, body: sum, link: { type: 'page', page: 'inbox', requestId: r.id } })
   return {
     ...state, adminRequests: [...state.adminRequests, r], leaves, notifications: [...n, ...state.notifications],
-    audit: [auditOf(state, 'request', `درخواست ${KIND_FA[r.kind]} #${no} ثبت شد (${STATUS_FA[status]}) — ${sum}`), ...state.audit],
+    audit: q.kind === 'it' ? state.audit : [auditOf(state, 'request', `Request ${KIND_FA[r.kind]} # ${no} Registered ${STATUS_FA[status]} — ${sum}`), ...state.audit],
   }
 }
 function applyRequestDecide(state: State, a: Extract<Action, { type: 'reqDecide' }>): State {
@@ -391,24 +397,24 @@ function applyRequestDecide(state: State, a: Extract<Action, { type: 'reqDecide'
   let n: Notification[]
   if (a.decision === 'reject') {
     next.status = 'rejected'
-    n = notify(state, [r.userId], { kind: 'request', title: `درخواست ${label} شما رد شد`, body: `${stage === 'office' ? 'مدیر اداری' : 'مدیرعامل'}: ${note}`, link: { type: 'page', page: 'requests' } })
+    n = notify(state, [r.userId], { kind: 'request', title: `Your request ${label} has been rejected`, body: `${stage === 'office' ? "Administrative Director" : "CEOs"}: ${note}`, link: { type: 'page', page: 'requests' } })
   } else if (stage === 'office') {
     next.status = 'pending_ceo'
     n = [
-      ...notify(state, [r.userId], { kind: 'request', title: `درخواست ${label} شما تأیید مدیر اداری را گرفت`, body: 'برای تصمیم نهایی در کارتابل مدیرعامل است.', link: { type: 'page', page: 'requests' } }),
-      ...notify(state, roleIds(state, 'ceo').filter((id) => id !== r.userId), { kind: 'request', title: `درخواست ${KIND_FA[r.kind]} از ${nameOf(state, r.userId)}`, body: `${sum} — تأیید مدیر اداری`, link: { type: 'page', page: 'inbox' } }),
+      ...notify(state, [r.userId], { kind: 'request', title: `Request ${label} You received approval from the administrative director`, body: "For the final decision in Carable is the CEO.", link: { type: 'page', page: 'requests' } }),
+      ...notify(state, roleIds(state, 'ceo').filter((id) => id !== r.userId), { kind: 'request', title: `Request ${KIND_FA[r.kind]} from ${nameOf(state, r.userId)}`, body: `${sum} — approval of the administrative director`, link: { type: 'page', page: 'inbox' } }),
     ]
   } else {
     next.status = 'approved'
     if (next.overtime) next.overtime = { ...next.overtime, approvedMinutes: minutes }
     if (r.kind === 'leave') { const rows = leaveRowsOf(state, next); next.leaveIds = rows.map((x) => x.id); leaves = [...leaves, ...rows] }
-    const part = r.kind === 'overtime' && minutes != null && minutes < r.overtime!.minutes ? ` (${faDigits(hm(minutes))} از ${faDigits(hm(r.overtime!.minutes))})` : ''
-    n = notify(state, [r.userId], { kind: 'request', title: `درخواست ${label} شما تأیید شد${part}`, body: sum, link: { type: 'page', page: 'requests' } })
+    const part = r.kind === 'overtime' && minutes != null && minutes < r.overtime!.minutes ? ` (${hm(minutes)} of ${hm(r.overtime!.minutes)})` : ''
+    n = notify(state, [r.userId], { kind: 'request', title: `Your ${label} request was approved${part}`, body: sum, link: { type: 'page', page: 'requests' } })
   }
-  const what = a.decision === 'approve' ? `تأیید ${stage === 'office' ? 'مدیر اداری' : 'نهایی مدیرعامل'}${minutes != null ? ` (${hm(minutes)})` : ''}` : `رد ${stage === 'office' ? 'مدیر اداری' : 'مدیرعامل'}`
+  const what = a.decision === 'approve' ? `Approve ${stage === 'office' ? "Administrative Director" : "Final Director"}${minutes != null ? ` (${hm(minutes)})` : ''}` : `Red ${stage === 'office' ? "Administrative Director" : "CEOs"}`
   return {
     ...state, adminRequests: state.adminRequests.map((x) => (x.id === r.id ? next : x)), leaves, notifications: [...n, ...state.notifications],
-    audit: [auditOf(state, 'request', `${what}: درخواست ${label} ${nameOf(state, r.userId)} — ${sum}${note ? ` — ${note}` : ''}`), ...state.audit],
+    audit: [auditOf(state, 'request', `${what} Request ${label} ${nameOf(state, r.userId)} — ${sum} ${note ? ` — ${note}` : ''}`), ...state.audit],
   }
 }
 /** Recalculate open-month timesheet days after any change that can move them; a day that newly shows undecided overtime prompts its owner */
@@ -418,8 +424,8 @@ function settleTimesheets(state: State): State {
   if (!r.changed.length) return state
   const n: Notification[] = r.changed.filter((c) => c.prev.calc.undecided === 0 && c.next.calc.undecided > 0).map((c) => ({
     id: `n-${idBase}${seq++}`, userId: c.next.userId, at: nowIso(), read: false, kind: 'timesheet' as const,
-    title: `اضافه‌کاری ${faDigits(hm(c.next.calc.undecided))} در ${jalaliFa(c.next.date)}`,
-    body: 'کار خالص این روز از ساعت موظف بیشتر شد. درخواست اضافه‌کاری ثبت کنید یا آن را بدون پرداخت بگذارید.',
+    title: `Overwork ${hm(c.next.calc.undecided)} at ${jalaliFa(c.next.date)}`,
+    body: "The net work of this day increased from the duty hour. Register an overtime request or leave it without payment.",
     link: { type: 'page', page: 'timesheet' },
   }))
   return { ...state, timesheets: r.days, notifications: n.length ? [...n, ...state.notifications] : state.notifications }
@@ -493,28 +499,33 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
     case 'login': return { ...state, session: a.id, nav: state.nav.page ? state.nav : { page: 'home' } }
     case 'logout': return { ...state, session: null, openTaskId: null, profileUserId: null, nav: { page: 'home' } }
     case 'register': {
-      const n = notify({ ...state, session: null }, controlIds(state), { kind: 'account', title: `درخواست عضویت: ${a.user.name} (${a.user.username})`, body: 'برای فعال شدن حساب، تیم و نقش را تعیین و تأیید کنید.', link: { type: 'page', page: 'admin' } })
+      const n = notify({ ...state, session: null }, controlIds(state), { kind: 'account', title: `Membership request: ${a.user.name} (${a.user.username})`, body: 'Assign a team and role to approve the account.', link: { type: 'page', page: 'admin' } })
       return { ...state, users: [...state.users, a.user], notifications: [...n, ...state.notifications] }
     }
     case 'approveUser': {
       const u = state.users.find((x) => x.id === a.id)!
-      const users = state.users.map((x) => (x.id === a.id ? { ...x, status: 'active' as const, teamId: a.teamId, role: a.role } : x))
+      const users = state.users.map((x) => x.id === a.id ? resolveRole(state.roleDefinitions, { ...x, status: 'active', teamId: a.teamId, role: a.role, customRoleId: undefined }) : x)
       const next = { ...state, users }
-      const n: Notification = { id: `n-${idBase}${seq++}`, userId: u.id, at: nowIso(), read: false, kind: 'account', actorId: state.session ?? undefined, title: 'حساب شما تأیید شد', body: `عضو تیم ${state.teams.find((t) => t.id === a.teamId)?.name} شدید. خوش آمدید.`, link: { type: 'page', page: 'home' } }
-      return { ...next, notifications: [n, ...state.notifications], messages: [...state.messages, sysMsg('general', `${u.name} (@${u.username}) به سامانه پیوست.`)], audit: [auditOf(state, 'admin', `حساب ${u.username} تأیید شد`), ...state.audit] }
+      const n: Notification = { id: `n-${idBase}${seq++}`, userId: u.id, at: nowIso(), read: false, kind: 'account', actorId: state.session ?? undefined, title: 'Your account was approved', body: `Team member ${state.teams.find((t) => t.id === a.teamId)?.name} Extreme. Welcome.`, link: { type: 'page', page: 'home' } }
+      return { ...next, notifications: [n, ...state.notifications], messages: [...state.messages, sysMsg('general', `${u.name} (@${u.username}) joined the workspace.`)], audit: [auditOf(state, 'admin', `Account ${u.username} Confirmed`), ...state.audit] }
     }
-    case 'rejectUser': return { ...state, users: state.users.map((x) => (x.id === a.id ? { ...x, status: 'rejected' as const } : x)), audit: [auditOf(state, 'admin', `درخواست عضویت ${state.users.find((x) => x.id === a.id)?.username} رد شد`), ...state.audit] }
-    case 'addUser': return { ...state, users: [...state.users, a.user], audit: [auditOf(state, 'admin', `کاربر ${a.user.username} تعریف شد`), ...state.audit] }
+    case 'rejectUser': return { ...state, users: state.users.map((x) => (x.id === a.id ? { ...x, status: 'rejected' as const } : x)), audit: [auditOf(state, 'admin', `Request for membership ${state.users.find((x) => x.id === a.id)?.username} has been rejected`), ...state.audit] }
+    case 'roleSave': case 'roleDelete': case 'roleAssign': {
+      const next = applyRoleAction(state, a)
+      const id = a.type === 'roleSave' ? a.role.id : a.type === 'roleDelete' ? a.id : a.roleId
+      return { ...next, audit: [auditOf(state, 'admin', `Role management: ${a.type} · ${id}${a.type === 'roleAssign' ? ` · ${a.userId}` : ''}`), ...state.audit] }
+    }
+    case 'whiteboardSave': case 'whiteboardDelete': return applyWhiteboard(state, a)
+    case 'addUser': return { ...state, users: [...state.users, resolveRole(state.roleDefinitions, a.user)], audit: [auditOf(state, 'admin', `User ${a.user.username} Defined`), ...state.audit] }
     case 'updateUser': {
       const before = state.users.find((x) => x.id === a.id)
       const changes = before ? (['role', 'teamId', 'status'] as const).filter((k) => k in a.patch && a.patch[k] !== before[k]) : []
-      const audit = changes.length && before ? [auditOf(state, 'admin', `حساب ${before.username}: ${changes.map((k) => `${k} «${String(before[k])}» ← «${String(a.patch[k])}»`).join('، ')}`), ...state.audit] : state.audit
-      return { ...state, users: state.users.map((x) => (x.id === a.id ? { ...x, ...a.patch } : x)), audit }
+      const audit = changes.length && before ? [auditOf(state, 'admin', `Account ${before.username}: ${changes.map((k) => `${k} «${String(before[k])}» ← «${String(a.patch[k])}»`).join('، ')}`), ...state.audit] : state.audit
+      return { ...state, users: state.users.map((x) => (x.id === a.id ? resolveRole(state.roleDefinitions, { ...x, ...a.patch, customRoleId: a.patch.role && a.patch.role !== x.role ? undefined : x.customRoleId }) : x)), audit }
     }
     case 'openProfile': return { ...state, profileUserId: a.id, profileTab: a.tab ?? 'profile' }
-    case 'setDigits': return { ...state, persianDigits: a.on }
     case 'setTheme': return { ...state, theme: a.theme }
-    case 'nav': return { ...state, nav: a.nav }
+    case 'nav': return { ...state, nav: a.nav, ...(a.fromHistory ? { openTaskId: null, profileUserId: null } : {}) }
     case 'openTask': return { ...state, openTaskId: a.id }
     case 'setStatus': {
       const t = state.tasks[a.taskId]
@@ -525,17 +536,17 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const nt: Task = { ...t, statusId: to.id }
       const extra: AuditEntry[] = []
       // Actual Start = first move into work; Actual Finish = reaching a done status (cleared if the task is reopened)
-      if (to.category !== 'todo' && !t.actualStart) { nt.actualStart = TODAY; extra.push(auditOf(state, 'actual', `Actual Start ثبت شد: ${jalaliFa(TODAY)}`, t.id)) }
-      if (to.category === 'done') { nt.actualFinish = TODAY; nt.flow = undefined; extra.push(auditOf(state, 'actual', `Actual Finish ثبت شد: ${jalaliFa(TODAY)}`, t.id)) }
-      else if (from?.category === 'done' && t.actualFinish) { nt.actualFinish = undefined; extra.push(auditOf(state, 'actual', 'تسک دوباره باز شد؛ Actual Finish پاک شد', t.id)) }
+      if (to.category !== 'todo' && !t.actualStart) { nt.actualStart = TODAY; extra.push(auditOf(state, 'actual', `Indeed Start was registered: ${jalaliFa(TODAY)}`, t.id)) }
+      if (to.category === 'done') { nt.actualFinish = TODAY; nt.flow = undefined; extra.push(auditOf(state, 'actual', `Truly Final was registered: ${jalaliFa(TODAY)}`, t.id)) }
+      else if (from?.category === 'done' && t.actualFinish) { nt.actualFinish = undefined; extra.push(auditOf(state, 'actual', "The task was reopened and the actual finish date was cleared.", t.id)) }
       const tasks = { ...state.tasks, [t.id]: nt }
       let writeQueue = state.writeQueue
       if (t.source === 'mdr' && t.docNumber && !t.removedFromMdr) {
         writeQueue = [...state.writeQueue.filter((w) => w.taskId !== t.id), { taskId: t.id, statusName: to.name, progress: to.progress, date: TODAY, queuedAt: Date.now() }]
       }
       const recips = [...recipientsOfTask(state, t), ...(to.category === 'done' ? controlIds(state) : [])]
-      const n = notify(state, recips, { kind: 'status', title: `Status «${t.name}»: ${to.name}`, body: `${from?.name ?? '—'} ← ${to.name}، توسط ${nameOf(state, state.session)}`, link: { type: 'task', id: t.id } })
-      const msgs = to.category === 'done' ? [sysMsg(`project:${t.projectId}`, `«${t.name}» ${t.docNumber ? `#${t.docNumber} ` : ''}به «${to.name}» رسید.`, { type: 'task', id: t.id })] : []
+      const n = notify(state, recips, { kind: 'status', title: `Status «${t.name}»: ${to.name}`, body: `${from?.name ?? '—'} → ${to.name}, by ${nameOf(state, state.session)}`, link: { type: 'task', id: t.id } })
+      const msgs = to.category === 'done' ? [sysMsg(`project:${t.projectId}`, `“${t.name}” ${t.docNumber ? `#${t.docNumber} ` : ''} reached “${to.name}”.`, { type: 'task', id: t.id })] : []
       return { ...state, tasks, writeQueue, notifications: [...n, ...state.notifications], messages: [...state.messages, ...msgs], audit: [...extra, auditOf(state, 'status', `Status: «${from?.name ?? '—'}» ← «${to.name}»`, t.id), ...state.audit] }
     }
     case 'savePlan': {
@@ -544,26 +555,26 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const assigneeTeamId = a.assignee?.kind === 'team' ? a.assignee.id : undefined
       // baselineDue keeps the first Due Date ever planned; later changes never overwrite it
       const nt: Task = { ...t, assigneeUserId, assigneeTeamId, estimation: a.estimation, start: a.start, due: a.due, baselineDue: t.baselineDue ?? a.due, baselineEstimation: t.baselineEstimation ?? a.estimation }
-      const who = assigneeUserId ? nameOf(state, assigneeUserId) : assigneeTeamId ? `تیم ${state.teams.find((x) => x.id === assigneeTeamId)?.name}` : 'Unassigned'
+      const who = assigneeUserId ? nameOf(state, assigneeUserId) : assigneeTeamId ? `Team ${state.teams.find((x) => x.id === assigneeTeamId)?.name}` : 'Unassigned'
       const entries: AuditEntry[] = []
       let n: Notification[] = []
       const changedAssignee = t.assigneeUserId !== assigneeUserId || t.assigneeTeamId !== assigneeTeamId
-      if (changedAssignee || t.estimation !== a.estimation) entries.push(auditOf(state, 'allocation', `تخصیص: ${who}${a.estimation ? `؛ Estimation ${a.estimation} نفر-ساعت` : ''}`, t.id))
-      if (t.start !== a.start || t.due !== a.due) entries.push(auditOf(state, 'dates', `Start/Due تغییر کرد`, t.id))
-      if (changedAssignee && a.assignee) n = notify(state, recipientsOfTask(state, nt), { kind: 'assign', title: `تسک «${t.name}» به ${assigneeTeamId ? 'تیم شما' : 'شما'} تخصیص داده شد`, body: [t.docNumber, a.estimation ? `${a.estimation} نفر-ساعت` : ''].filter(Boolean).join('، '), link: { type: 'task', id: t.id } })
-      else if (!changedAssignee && (t.start !== a.start || t.due !== a.due)) n = notify(state, recipientsOfTask(state, nt), { kind: 'plan', title: `برنامه‌ی «${t.name}» تغییر کرد`, body: 'Start یا Due Date به‌روز شد.', link: { type: 'task', id: t.id } })
+      if (changedAssignee || t.estimation !== a.estimation) entries.push(auditOf(state, 'allocation', `Assigned to: ${who}${a.estimation ? `Estimation ${a.estimation} Person-hour` : ''}`, t.id))
+      if (t.start !== a.start || t.due !== a.due) entries.push(auditOf(state, 'dates', "Start/Due has changed", t.id))
+      if (changedAssignee && a.assignee) n = notify(state, recipientsOfTask(state, nt), { kind: 'assign', title: `Task “${t.name}” was assigned to ${assigneeTeamId ? "Your team" : "You"}`, body: [t.docNumber, a.estimation ? `${a.estimation} person-hours` : ''].filter(Boolean).join('، '), link: { type: 'task', id: t.id } })
+      else if (!changedAssignee && (t.start !== a.start || t.due !== a.due)) n = notify(state, recipientsOfTask(state, nt), { kind: 'plan', title: `Schedule updated for “${t.name}”`, body: 'The start or due date was updated.', link: { type: 'task', id: t.id } })
       return { ...state, tasks: { ...state.tasks, [t.id]: nt }, allocations: [...state.allocations.filter((x) => x.taskId !== t.id), ...a.allocations], notifications: [...n, ...state.notifications], audit: [...entries, ...state.audit] }
     }
     case 'addTask':
-      return { ...state, tasks: { ...state.tasks, [a.task.id]: { ...a.task, createdBy: actor(state), createdAt: nowIso() } }, messages: [...state.messages, sysMsg(`project:${a.task.projectId}`, `${nameOf(state, state.session)} تسک دستی «${a.task.name}» را ساخت.`, { type: 'task', id: a.task.id })], audit: [auditOf(state, 'admin', `تسک دستی «${a.task.name}» ساخته شد`, a.task.id), ...state.audit] }
+      return { ...state, tasks: { ...state.tasks, [a.task.id]: { ...a.task, createdBy: actor(state), createdAt: nowIso() } }, messages: [...state.messages, sysMsg(`project:${a.task.projectId}`, `${nameOf(state, state.session)} Hand-made Task " ${a.task.name} "`, { type: 'task', id: a.task.id })], audit: [auditOf(state, 'admin', `Manual task “${a.task.name}” created`, a.task.id), ...state.audit] }
     case 'addComment': {
       const t = state.tasks[a.taskId]
       // only people who can open the task are notified, so a mention never carries its text to anyone outside it
       const mentions = parseMentions(a.text, state.users).filter((id) => canViewTask(state, state.users.find((u) => u.id === id), t))
       const c: Comment = { id: `c-${idBase}${seq++}`, taskId: a.taskId, userId: actor(state), at: nowIso(), text: a.text, mentions }
       const n = [
-        ...notify(state, mentions, { kind: 'mention', title: `${nameOf(state, state.session)} شما را در کامنت «${t.name}» تگ کرد`, body: a.text, link: { type: 'task', id: t.id } }),
-        ...notify(state, recipientsOfTask(state, t).filter((x) => !mentions.includes(x)), { kind: 'comment', title: `کامنت تازه روی «${t.name}»`, body: a.text, link: { type: 'task', id: t.id } }),
+        ...notify(state, mentions, { kind: 'mention', title: `${nameOf(state, state.session)} mentioned you in a comment on “${t.name}”`, body: a.text, link: { type: 'task', id: t.id } }),
+        ...notify(state, recipientsOfTask(state, t).filter((x) => !mentions.includes(x)), { kind: 'comment', title: `New comment on «${t.name}»`, body: a.text, link: { type: 'task', id: t.id } }),
       ]
       return { ...state, comments: [...state.comments, c], notifications: [...n, ...state.notifications] }
     }
@@ -571,9 +582,9 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const members = channelMembers(state, a.channelId)
       const mentions = parseMentions(a.text, state.users).filter((id) => members.includes(id))
       const m: ChatMessage = { id: `m-${idBase}${seq++}`, channelId: a.channelId, userId: actor(state), at: nowIso(), text: a.text, mentions }
-      const where = a.channelId === 'general' ? 'چت عمومی' : a.channelId === 'announce' ? 'اطلاعیه‌ها' : `چت ${state.projects.find((p) => `project:${p.id}` === a.channelId)?.name}`
-      let n = notify(state, mentions, { kind: 'mention', title: `${nameOf(state, state.session)} شما را در ${where} تگ کرد`, body: a.text, link: { type: 'chat', channelId: a.channelId } })
-      if (a.channelId === 'announce') n = [...n, ...notify(state, members.filter((x) => !mentions.includes(x)), { kind: 'announce', title: `اطلاعیه‌ی جدید از ${nameOf(state, state.session)}`, body: a.text, link: { type: 'chat', channelId: 'announce' } })]
+      const where = a.channelId === 'general' ? "Public Chat" : a.channelId === 'announce' ? "News" : `Chat ${state.projects.find((p) => `project:${p.id}` === a.channelId)?.name}`
+      let n = notify(state, mentions, { kind: 'mention', title: `${nameOf(state, state.session)} He tagged you in ${where}`, body: a.text, link: { type: 'chat', channelId: a.channelId } })
+      if (a.channelId === 'announce') n = [...n, ...notify(state, members.filter((x) => !mentions.includes(x)), { kind: 'announce', title: `New announcement from ${nameOf(state, state.session)}`, body: a.text, link: { type: 'chat', channelId: 'announce' } })]
       const lastRead = { ...state.lastRead, [`${actor(state)}|${a.channelId}`]: m.at }
       return { ...state, messages: [...state.messages, m], notifications: [...n, ...state.notifications], lastRead }
     }
@@ -645,10 +656,10 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
         return { ...it, state: a.approve ? 'approved' as const : 'rejected' as const }
       })
       const text = a.approve
-        ? `تأیید Sync Review: ${created} تسک جدید، ${changed} تغییر، ${removed} علامت «Removed from MDR»`
-        : `رد ${ids.size} ردیف در Sync Review`
-      const n = a.approve ? notify(state, controlIds(state), { kind: 'sync', title: `${nameOf(state, state.session)} ردیف‌های MDR را تأیید کرد`, body: `${created} تسک جدید در استخر Unassigned، ${changed} تغییر، ${removed} حذف`, link: { type: 'page', page: 'review' } }) : []
-      const msgs = a.approve ? [...projectsTouched].map((pid) => sysMsg(`project:${pid}`, `Sync Review تأیید شد: ${created} تسک جدید از MDR ساخته شد و ${changed} تغییر اعمال شد.`, { type: 'project', id: pid })) : []
+        ? `Sync Review Verification: ${created} New Task, ${changed} Change, ${removed} Mark "Removed from MDR"`
+        : `Rejected ${ids.size} rows in Sync Review`
+      const n = a.approve ? notify(state, controlIds(state), { kind: 'sync', title: `${nameOf(state, state.session)} approved the MDR rows`, body: `${created} New Task in Unassigned Pool, ${changed} Change, ${removed} Remove`, link: { type: 'page', page: 'review' } }) : []
+      const msgs = a.approve ? [...projectsTouched].map((pid) => sysMsg(`project:${pid}`, `Sync Review was confirmed: ${created} The new Task was made of MDR and ${changed} the change was applied.`, { type: 'project', id: pid })) : []
       return { ...state, tasks, syncItems: items, notifications: [...n, ...state.notifications], messages: [...state.messages, ...msgs], audit: [auditOf(state, 'sync', text), ...state.audit] }
     }
     case 'addRun': return { ...state, syncRuns: [a.run, ...state.syncRuns] }
@@ -661,16 +672,16 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
         id: `run-wb-${Date.now()}-${i}`, projectId: pid, trigger: 'writeback', at: nowIso(), durationSec: 2 + list.length,
         state: 'success', rowsRead: list.length, diffs: { new: 0, changed: 0, removed: 0 }, cellsWritten: list.length * 3,
         log: [
-          { level: 'info', text: `${list.length} سند: سطر هدف پیش از نوشتن با Document Number دوباره خوانده شد.` },
+          { level: 'info', text: `${list.length} Document: The target line was reread before writing with Document Number.` },
           ...list.map((w) => {
             const t = state.tasks[w.taskId]
-            return { level: 'info' as const, text: `${t.docNumber} ← ردیف ${t.mdrRow}: Last Status «${w.statusName}»، Progress ${w.progress}٪، Last Status Date ${w.date}` }
+            return { level: 'info' as const, text: `${t.docNumber} ← Row ${t.mdrRow}: Last Status « ${w.statusName} », Progress ${w.progress}%, Last Status Date ${w.date}` }
           }),
-          { level: 'info', text: `batchUpdate: فقط ۳ ستون internal — ${list.length * 3} سلول. هیچ سلول دیگری تغییر نکرد.` },
+          { level: 'info', text: `batchupdate: only 3 internal columns — ${list.length * 3} cells. No other cells changed.` },
         ],
       }))
-      const msgs = Object.entries(byProject).map(([pid, list]) => sysMsg(`project:${pid}`, `Write-back به MDR: Status ${list.length} سند در ستون‌های internal نوشته شد.`, { type: 'page', page: 'runs' }))
-      const n = notify({ ...state, session: null }, controlIds(state), { kind: 'sync', title: 'Write-back به MDR انجام شد', body: `${state.writeQueue.length} سند، ${state.writeQueue.length * 3} سلول`, link: { type: 'page', page: 'runs' } })
+      const msgs = Object.entries(byProject).map(([pid, list]) => sysMsg(`project:${pid}`, `Writing-back to MDR: Status ${list.length} The document was written in internal columns.`, { type: 'page', page: 'runs' }))
+      const n = notify({ ...state, session: null }, controlIds(state), { kind: 'sync', title: 'MDR write-back completed', body: `${state.writeQueue.length} documents, ${state.writeQueue.length * 3} cells`, link: { type: 'page', page: 'runs' } })
       return { ...state, writeQueue: [], syncRuns: [...runs, ...state.syncRuns], messages: [...state.messages, ...msgs], notifications: [...n, ...state.notifications] }
     }
     case 'sysRunStart': return { ...state, syncRuns: [a.run, ...state.syncRuns] }
@@ -690,14 +701,14 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const d = { new: a.items.filter((x) => x.kind === 'new').length, changed: a.items.filter((x) => x.kind === 'changed').length, removed: a.items.filter((x) => x.kind === 'removed').length }
       const ok = a.run.state === 'success' || a.run.state === 'partial'
       const text = ok
-        ? `Sync ${p.code}: ${a.run.rowsRead ?? 0} سطر MDR خوانده شد؛ ${d.new} جدید، ${d.changed} تغییر، ${d.removed} حذف در صف Sync Review${moved ? `؛ ${moved} تسک سطر یا Plan Issue تازه گرفت` : ''}`
-        : `Sync ${p.code} ناموفق بود: ${a.run.log?.find((l) => l.level === 'error')?.text ?? ''}`
+        ? `Sync ${p.code}: ${a.run.rowsRead ?? 0} The MDR line was read; ${d.new} New, ${d.changed} Change, ${d.removed} Delete in the Sync Review queue ${moved ? `${moved} Task Row or Plan Issue New` : ''}`
+        : `Sync ${p.code} was unsuccessful: ${a.run.log?.find((l) => l.level === 'error')?.text ?? ''}`
       const items = a.items.length
       const n = !ok || items ? notify({ ...state, session: null }, controlIds(state), {
-        kind: 'sync', title: ok ? `${items} ردیف MDR ${p.name} در صف Sync Review` : `Sync ${p.name} ناموفق بود`,
-        body: ok ? `${d.new} جدید، ${d.changed} تغییر، ${d.removed} حذف از MDR` : a.run.log?.find((l) => l.level === 'error')?.text, link: { type: 'page', page: ok ? 'review' : 'runs' },
+        kind: 'sync', title: ok ? `${items} MDR Row ${p.name} in Sync Review queue` : `Sync ${p.name} failed`,
+        body: ok ? `${d.new} New, ${d.changed} Change, ${d.removed} Remove from MDR` : a.run.log?.find((l) => l.level === 'error')?.text, link: { type: 'page', page: ok ? 'review' : 'runs' },
       }) : []
-      const msgs = ok && items ? [sysMsg(`project:${p.id}`, `Sync با MDR: ${d.new} ردیف جدید، ${d.changed} تغییر و ${d.removed} حذف برای بررسی کنترل پروژه آماده شد.`, { type: 'page', page: 'review' })] : []
+      const msgs = ok && items ? [sysMsg(`project:${p.id}`, `Sync was prepared with MDR: ${d.new} new row, ${d.changed} change and ${d.removed} delete to check project control.`, { type: 'page', page: 'review' })] : []
       return {
         ...state, tasks, syncRuns, syncItems, projects: ok ? state.projects.map((x) => (x.id === p.id ? { ...x, lastSync: a.at } : x)) : state.projects,
         notifications: [...n, ...state.notifications], messages: [...state.messages, ...msgs], audit: [{ ...auditOf(state, 'sync', text), userId: a.by ?? 'system' }, ...state.audit],
@@ -708,25 +719,25 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const writeQueue = state.writeQueue.filter((w) => !done.has(`${w.taskId}@${w.queuedAt}`))
       const tasks = { ...state.tasks }
       for (const r of a.rows) if (tasks[r.taskId] && tasks[r.taskId].mdrRow !== r.mdrRow) tasks[r.taskId] = { ...tasks[r.taskId], mdrRow: r.mdrRow }
-      const msgs = a.runs.filter((r) => r.state !== 'failed' && r.cellsWritten && r.projectId !== 'all').map((r) => sysMsg(`project:${r.projectId}`, `Write-back به MDR: Status ${r.cellsWritten / 3} سند در ستون‌های internal نوشته شد.`, { type: 'page', page: 'runs' }))
+      const msgs = a.runs.filter((r) => r.state !== 'failed' && r.cellsWritten && r.projectId !== 'all').map((r) => sysMsg(`project:${r.projectId}`, `Writing-back to MDR: Status ${r.cellsWritten / 3} The document was written in internal columns.`, { type: 'page', page: 'runs' }))
       const failed = a.runs.filter((r) => r.state === 'failed' || r.state === 'partial')
       const cells = a.runs.reduce((x, r) => x + r.cellsWritten, 0)
       const n = notify({ ...state, session: null }, controlIds(state), failed.length
-        ? { kind: 'sync', title: 'Write-back به MDR کامل انجام نشد', body: failed.flatMap((r) => r.log.filter((l) => l.level !== 'info').map((l) => l.text)).slice(0, 2).join(' — '), link: { type: 'page', page: 'runs' } }
-        : { kind: 'sync', title: 'Write-back به MDR انجام شد', body: `${cells / 3} سند، ${cells} سلول`, link: { type: 'page', page: 'runs' } })
+        ? { kind: 'sync', title: 'MDR write-back was incomplete', body: failed.flatMap((r) => r.log.filter((l) => l.level !== 'info').map((l) => l.text)).slice(0, 2).join(' — '), link: { type: 'page', page: 'runs' } }
+        : { kind: 'sync', title: 'MDR write-back completed', body: `${cells / 3} documents, ${cells} cells`, link: { type: 'page', page: 'runs' } })
       return { ...state, tasks, writeQueue, syncRuns: [...a.runs, ...state.syncRuns], messages: [...state.messages, ...msgs], notifications: [...n, ...state.notifications] }
     }
-    case 'addHoliday': return { ...state, holidays: [...state.holidays, a.holiday].sort((x, y) => x.date.localeCompare(y.date)), audit: [auditOf(state, 'admin', `تعطیلی «${a.holiday.title}» اضافه شد`), ...state.audit] }
+    case 'addHoliday': return { ...state, holidays: [...state.holidays, a.holiday].sort((x, y) => x.date.localeCompare(y.date)), audit: [auditOf(state, 'admin', `Holiday “${a.holiday.title}” added`), ...state.audit] }
     case 'removeHoliday': return { ...state, holidays: state.holidays.filter((h) => h.id !== a.id) }
     case 'addLeave': {
       // direct entry by the Administrative Manager (exceptions); the reason stays on the row and in the AuditLog
       const leave: Leave = { ...a.leave, note: a.leave.note?.trim(), by: actor(state), at: nowIso() }
-      const n = notify(state, [leave.userId], { kind: 'request', title: 'مرخصی شما ثبت شد', body: `${leave.hours >= 8 ? 'روز کامل' : `${leave.hours} ساعت`}، ${jalaliFa(leave.date)}`, link: { type: 'page', page: 'timesheet' } })
-      return { ...state, leaves: [...state.leaves, leave], notifications: [...n, ...state.notifications], audit: [auditOf(state, 'request', `ثبت مستقیم مرخصی ${nameOf(state, leave.userId)}: ${leave.hours} ساعت در ${jalaliFa(leave.date)} — ${leave.note}`), ...state.audit] }
+      const n = notify(state, [leave.userId], { kind: 'request', title: 'Your leave was recorded', body: `${leave.hours >= 8 ? "Full Day" : `${leave.hours} Hours`}، ${jalaliFa(leave.date)}`, link: { type: 'page', page: 'timesheet' } })
+      return { ...state, leaves: [...state.leaves, leave], notifications: [...n, ...state.notifications], audit: [auditOf(state, 'request', `Direct Registration ${nameOf(state, leave.userId)}: ${leave.hours} Hour at ${jalaliFa(leave.date)} — ${leave.note}`), ...state.audit] }
     }
     case 'removeLeave': {
       const l = state.leaves.find((x) => x.id === a.id)!
-      return { ...state, leaves: state.leaves.filter((x) => x.id !== a.id), audit: [auditOf(state, 'request', `مرخصی ${nameOf(state, l.userId)} در ${jalaliFa(l.date)} حذف شد`), ...state.audit] }
+      return { ...state, leaves: state.leaves.filter((x) => x.id !== a.id), audit: [auditOf(state, 'request', `Leave ${nameOf(state, l.userId)} was removed at ${jalaliFa(l.date)}`), ...state.audit] }
     }
     case 'statusAdd': return { ...state, statusSets: { ...state.statusSets, [a.scope]: [...state.statusSets[a.scope], a.status] } }
     case 'statusUpdate': return { ...state, statusSets: { ...state.statusSets, [a.scope]: state.statusSets[a.scope].map((s) => (s.id === a.id ? { ...s, ...a.patch } : s)) } }
@@ -758,13 +769,13 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
     case 'classifyTasks': {
       const ids = new Set(a.ids)
       const tasks = Object.fromEntries(Object.entries(state.tasks).map(([id, t]) => [id, ids.has(id) ? { ...t, projectStage: a.projectStage, ...(a.workScope ? { workScope: a.workScope } : {}) } : t]))
-      return { ...state, tasks, audit: [auditOf(state, 'admin', 'طبقه‌بندی ' + ids.size + ' تسک در مرحله ' + a.projectStage), ...state.audit] }
+      return { ...state, tasks, audit: [auditOf(state, 'admin', "Classified " + ids.size + " Stiffness in stage " + a.projectStage), ...state.audit] }
     }
-    case 'teamAdd': return { ...state, teams: [...state.teams, { ...a.team, name: a.team.name.trim() }], audit: [auditOf(state, 'admin', 'تعریف تیم: ' + a.team.name.trim()), ...state.audit] }
-    case 'teamUpdate': return { ...state, teams: state.teams.map((t) => t.id === a.id ? { ...t, name: a.patch.name.trim(), kind: a.patch.kind } : t), audit: [auditOf(state, 'admin', 'ویرایش تیم: ' + a.id), ...state.audit] }
-    case 'teamArchive': return { ...state, teams: state.teams.map((t) => t.id === a.id ? { ...t, archived: a.archived } : t), audit: [auditOf(state, 'admin', 'وضعیت تیم ' + a.id + ': ' + (a.archived ? 'بایگانی' : 'فعال')), ...state.audit] }
-    case 'teamMember': return { ...state, users: state.users.map((u) => u.id === a.userId ? { ...u, teamId: a.teamId } : u), audit: [auditOf(state, 'admin', 'تغییر عضویت سازمانی ' + a.userId + ' از ' + (state.users.find((u) => u.id === a.userId)?.teamId || 'بدون تیم') + ' به ' + (a.teamId || 'بدون تیم')), ...state.audit] }
-    case 'projectAdd': return { ...state, projects: [...state.projects, { ...a.project, staffing: a.project.staffing ?? emptyStaffing() }], audit: [auditOf(state, 'admin', `پروژه‌ی ${a.project.code} تعریف شد`), ...state.audit] }
+    case 'teamAdd': return { ...state, teams: [...state.teams, { ...a.team, name: a.team.name.trim() }], audit: [auditOf(state, 'admin', "Team Definition: " + a.team.name.trim()), ...state.audit] }
+    case 'teamUpdate': return { ...state, teams: state.teams.map((t) => t.id === a.id ? { ...t, name: a.patch.name.trim(), kind: a.patch.kind, icon: a.patch.icon ?? t.icon } : t), audit: [auditOf(state, 'admin', "Team Edit: " + a.id), ...state.audit] }
+    case 'teamArchive': return { ...state, teams: state.teams.map((t) => t.id === a.id ? { ...t, archived: a.archived } : t), audit: [auditOf(state, 'admin', "Team Status " + a.id + ': ' + (a.archived ? "Category: Archives" : "Actively")), ...state.audit] }
+    case 'teamMember': return { ...state, users: state.users.map((u) => u.id === a.userId ? { ...u, teamId: a.teamId } : u), audit: [auditOf(state, 'admin', "Change of organizational membership " + a.userId + " from " + (state.users.find((u) => u.id === a.userId)?.teamId || "No team") + " the New York Times " + (a.teamId || "No team")), ...state.audit] }
+    case 'projectAdd': return { ...state, projects: [...state.projects, { ...a.project, staffing: a.project.staffing ?? emptyStaffing() }], audit: [auditOf(state, 'admin', `Project ${a.project.code} is defined`), ...state.audit] }
     case 'projectUpdate': return { ...state, projects: state.projects.map((p) => (p.id === a.id ? { ...p, ...a.patch } : p)) }
 
     // ---------- Phase 1: supervision, team spaces, review, attachments, actual dates ----------
@@ -782,15 +793,15 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const files = (a.files ?? []).map((f) => mkAttachment(state, task.id, f))
       const label = flowLabel(task)
       const n = [
-        ...notify(state, [task.assigneeUserId], { kind: 'assign', title: `${label} «${task.name}» به شما ارجاع شد`, body: [task.location, task.due ? `Due: ${jalaliFa(task.due)}` : ''].filter(Boolean).join('، ') || undefined, link: { type: 'task', id: task.id } }),
+        ...notify(state, [task.assigneeUserId], { kind: 'assign', title: `${label} «${task.name}» was assigned to you`, body: [task.location, task.due ? `Due: ${jalaliFa(task.due)}` : ''].filter(Boolean).join('، ') || undefined, link: { type: 'task', id: task.id } }),
         // CEO-centred coordination: the CEO hears of every new task of the space
-        ...(isFinTask(task) ? notify(state, ceoIds(state).filter((id) => id !== task.assigneeUserId), { kind: 'plan', title: `Task تازه در ${FIN_SPACE_FA[finSpaceOf(task) ?? 'finance']}: «${task.name}»`, body: task.assigneeUserId ? `مسئول: ${nameOf(state, task.assigneeUserId)}` : 'هنوز ارجاع نشده', link: { type: 'task', id: task.id } }) : []),
+        ...(isFinTask(task) ? notify(state, ceoIds(state).filter((id) => id !== task.assigneeUserId), { kind: 'plan', title: `New task in ${FIN_SPACE_FA[finSpaceOf(task) ?? 'finance']}: “${task.name}”`, body: task.assigneeUserId ? `Responsible: ${nameOf(state, task.assigneeUserId)}` : "Unassigned", link: { type: 'task', id: task.id } }) : []),
       ]
-      const msgs = sup ? [sysMsg(`project:${task.projectId}`, `${nameOf(state, me)} مورد نظارتی «${task.name}» را ثبت کرد${task.assigneeUserId ? ` و به ${nameOf(state, task.assigneeUserId)} ارجاع داد` : ''}.`, { type: 'task', id: task.id })] : []
+      const msgs = sup ? [sysMsg(`project:${task.projectId}`, `${nameOf(state, me)} The monitor recorded the " ${task.name} " ${task.assigneeUserId ? ` and referred to ${nameOf(state, task.assigneeUserId)}` : ''}.`, { type: 'task', id: task.id })] : []
       return {
         ...state, tasks: { ...state.tasks, [task.id]: task }, attachments: [...state.attachments, ...files],
         notifications: [...n, ...state.notifications], messages: [...state.messages, ...msgs],
-        audit: [auditOf(state, 'task', `${label} ساخته شد${task.assigneeUserId ? `؛ ارجاع به ${nameOf(state, task.assigneeUserId)}` : ''}${files.length ? `؛ ${files.length} پیوست` : ''}`, task.id), ...state.audit],
+        audit: [auditOf(state, 'task', `${label} created${task.assigneeUserId ? `Reference to ${nameOf(state, task.assigneeUserId)}` : ''}${files.length ? `${files.length} Join` : ''}`, task.id), ...state.audit],
       }
     }
     case 'flow': return applyFlow(state, a)
@@ -804,26 +815,26 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       if (nt.baselineDue == null && nt.due) nt.baselineDue = nt.due
       const added = (nt.participantIds ?? []).filter((x) => !(t.participantIds ?? []).includes(x))
       const n = [
-        ...(nt.reviewerId !== t.reviewerId ? notify(state, [nt.reviewerId], { kind: 'review', title: `Reviewer «${t.name}» شدید`, body: 'پس از ارسال برای بررسی، تأیید یا بازگشت با شماست.', link: { type: 'task', id: t.id } }) : []),
-        ...notify(state, added, { kind: 'assign', title: `به «${t.name}» به‌عنوان مشارکت‌کننده اضافه شدید`, link: { type: 'task', id: t.id } }),
+        ...(nt.reviewerId !== t.reviewerId ? notify(state, [nt.reviewerId], { kind: 'review', title: `You are the reviewer for “${t.name}”`, body: "After sending to check, confirm or return with you.", link: { type: 'task', id: t.id } }) : []),
+        ...notify(state, added, { kind: 'assign', title: `${t.name} as an additional participant.`, link: { type: 'task', id: t.id } }),
       ]
-      const text = keys.length === 1 && keys[0] === 'progressPct' ? `پیشرفت: ${t.progressPct ?? 0}٪ ← ${nt.progressPct ?? 0}٪` : `ویرایش: ${keys.map((k) => FIELD_FA[k] ?? k).join('، ')}`
+      const text = keys.length === 1 && keys[0] === 'progressPct' ? `Progress: ${t.progressPct ?? 0}% → ${nt.progressPct ?? 0}%` : `Edit: ${keys.map((k) => FIELD_FA[k] ?? k).join('، ')}`
       return { ...state, tasks: { ...state.tasks, [t.id]: nt }, notifications: [...n, ...state.notifications], audit: [auditOf(state, keys.some((k) => k === 'due' || k === 'start') ? 'dates' : 'task', text, t.id), ...state.audit] }
     }
     case 'addAttachments': {
       const files = a.files.map((f) => mkAttachment(state, a.taskId, f))
-      return { ...state, attachments: [...state.attachments, ...files], audit: [auditOf(state, 'task', `${files.length} پیوست افزوده شد: ${files.map((f) => f.name).join('، ')}`, a.taskId), ...state.audit] }
+      return { ...state, attachments: [...state.attachments, ...files], audit: [auditOf(state, 'task', `Added ${files.length} attachments: ${files.map((f) => f.name).join('، ')}`, a.taskId), ...state.audit] }
     }
     case 'setActual': {
       const t = state.tasks[a.taskId]
       const nt: Task = { ...t, actualStart: a.actualStart, actualFinish: a.actualFinish }
-      const txt = `اصلاح دستی تاریخ واقعی: Start ${t.actualStart ? jalaliFa(t.actualStart) : '—'} ← ${a.actualStart ? jalaliFa(a.actualStart) : '—'}، Finish ${t.actualFinish ? jalaliFa(t.actualFinish) : '—'} ← ${a.actualFinish ? jalaliFa(a.actualFinish) : '—'}. دلیل: ${a.reason}`
+      const txt = `Real date manual modification: Start ${t.actualStart ? jalaliFa(t.actualStart) : '—'} → ${a.actualStart ? jalaliFa(a.actualStart) : '—'}, Finish ${t.actualFinish ? jalaliFa(t.actualFinish) : '—'} ⟐ ${a.actualFinish ? jalaliFa(a.actualFinish) : '—'}. Reason: ${a.reason}`
       return { ...state, tasks: { ...state.tasks, [t.id]: nt }, audit: [auditOf(state, 'actual', txt, t.id), ...state.audit] }
     }
     case 'internalProjectAdd': {
       const ip = { ...a.project, createdBy: actor(state), createdAt: nowIso() }
-      const n = notify(state, teamMembers(state, ip.teamId), { kind: 'plan', title: `پروژه‌ی داخلی تازه در تیم: «${ip.name}»`, body: ip.description, link: { type: 'page', page: 'team' } })
-      return { ...state, internalProjects: [...state.internalProjects, ip], notifications: [...n, ...state.notifications], audit: [auditOf(state, 'task', `پروژه‌ی داخلی «${ip.name}» در تیم ${state.teams.find((x) => x.id === ip.teamId)?.name} ساخته شد`), ...state.audit] }
+      const n = notify(state, teamMembers(state, ip.teamId), { kind: 'plan', title: `The new internal project in the team: ${ip.name}`, body: ip.description, link: { type: 'page', page: 'team' } })
+      return { ...state, internalProjects: [...state.internalProjects, ip], notifications: [...n, ...state.notifications], audit: [auditOf(state, 'task', `The internal project ${ip.name} was built on the team ${state.teams.find((x) => x.id === ip.teamId)?.name}`), ...state.audit] }
     }
     case 'logWork': {
       const t = state.tasks[a.log.taskId]
@@ -833,12 +844,12 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
         id: `w-${idBase}${seq++}`, taskId: t.id, userId: me, minutes: a.log.minutes, workDate: a.log.workDate, description: a.log.description.trim(),
         createdAt: nowIso(), projectId: t.projectId, teamId: u?.teamId ?? '', source: 'manual',
       }
-      const audit = [auditOf(state, 'worklog', `Work Log: ${fmtMinutes(log.minutes)} در ${jalaliFa(log.workDate)} — ${log.description}`, t.id)]
+      const audit = [auditOf(state, 'worklog', `Work Log: ${fmtMinutes(log.minutes)} on ${jalaliFa(log.workDate)} — ${log.description}`, t.id)]
       let tasks = state.tasks
       // Actual Start = the earliest of: first Work Log, first move into work
       if (!t.actualStart || log.workDate < t.actualStart) {
         tasks = { ...tasks, [t.id]: { ...t, actualStart: log.workDate } }
-        audit.unshift(auditOf(state, 'actual', `Actual Start از اولین Work Log: ${jalaliFa(log.workDate)}`, t.id))
+        audit.unshift(auditOf(state, 'actual', `Really Start from the First Work Log: ${jalaliFa(log.workDate)}`, t.id))
       }
       return { ...state, tasks, workLogs: [...state.workLogs, log], audit: [...audit, ...state.audit] }
     }
@@ -849,19 +860,19 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
         ...log, minutes: a.patch.minutes, workDate: a.patch.workDate, description: a.patch.description.trim(), updatedAt: nowIso(), updatedBy: me,
         revisions: [...(log.revisions ?? []), { at: nowIso(), by: me, minutes: log.minutes, workDate: log.workDate, description: log.description, reason: a.reason?.trim() || undefined }],
       }
-      const n = log.userId !== me ? notify(state, [log.userId], { kind: 'worklog', title: `Work Log شما ویرایش شد`, body: `${fmtMinutes(log.minutes)} ← ${fmtMinutes(next.minutes)}؛ ${a.reason ?? ''}`, link: { type: 'task', id: log.taskId } }) : []
+      const n = log.userId !== me ? notify(state, [log.userId], { kind: 'worklog', title: `Your work log was edited`, body: `${fmtMinutes(log.minutes)} ← ${fmtMinutes(next.minutes)}؛ ${a.reason ?? ''}`, link: { type: 'task', id: log.taskId } }) : []
       return {
         ...state, workLogs: state.workLogs.map((l) => (l.id === a.id ? next : l)), notifications: [...n, ...state.notifications],
-        audit: [auditOf(state, 'worklog', `ویرایش Work Log ${nameOf(state, log.userId)}: ${fmtMinutes(log.minutes)} در ${jalaliFa(log.workDate)} ← ${fmtMinutes(next.minutes)} در ${jalaliFa(next.workDate)}${a.reason ? ` — دلیل: ${a.reason}` : ''}`, log.taskId), ...state.audit],
+        audit: [auditOf(state, 'worklog', `Edit Work Log ${nameOf(state, log.userId)}: ${fmtMinutes(log.minutes)} in ${jalaliFa(log.workDate)} → ${fmtMinutes(next.minutes)} in ${jalaliFa(next.workDate)} ${a.reason ? ` — Reason: ${a.reason}` : ''}`, log.taskId), ...state.audit],
       }
     }
     case 'deleteWorkLog': {
       const log = state.workLogs.find((l) => l.id === a.id)!
       const me = actor(state)
-      const n = log.userId !== me ? notify(state, [log.userId], { kind: 'worklog', title: 'Work Log شما حذف شد', body: `${fmtMinutes(log.minutes)} در ${jalaliFa(log.workDate)}؛ ${a.reason ?? ''}`, link: { type: 'task', id: log.taskId } }) : []
+      const n = log.userId !== me ? notify(state, [log.userId], { kind: 'worklog', title: 'Your work log was deleted', body: `${fmtMinutes(log.minutes)} on ${jalaliFa(log.workDate)} · ${a.reason ?? ''}`, link: { type: 'task', id: log.taskId } }) : []
       return {
         ...state, workLogs: state.workLogs.map((l) => (l.id === a.id ? { ...l, deletedAt: nowIso(), deletedBy: me, deleteReason: a.reason?.trim() || undefined } : l)), notifications: [...n, ...state.notifications],
-        audit: [auditOf(state, 'worklog', `حذف Work Log ${nameOf(state, log.userId)}: ${fmtMinutes(log.minutes)} در ${jalaliFa(log.workDate)} (رکورد نگه داشته شد)${a.reason ? ` — دلیل: ${a.reason}` : ''}`, log.taskId), ...state.audit],
+        audit: [auditOf(state, 'worklog', `Deleted Work Log ${nameOf(state, log.userId)}: ${fmtMinutes(log.minutes)} in ${jalaliFa(log.workDate)} (record kept) ${a.reason ? ` — Reason: ${a.reason}` : ''}`, log.taskId), ...state.audit],
       }
     }
     case 'pointRecalc': return state
@@ -869,20 +880,28 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
     // personal tasks: private, so no AuditLog lines and no notifications
     case 'ptCreate': case 'ptUpdate': case 'ptDelete': case 'ptMove': case 'psSave': return applyPersonal(state, a)
     case 'reqCreate': return applyRequestCreate(state, a)
+    case 'reqItUpdate': {
+      const r = state.adminRequests.find((request) => request.id === a.id)!
+      const at = nowIso()
+      const step: RequestStep = { stage: 'it', by: actor(state), at, itStatus: a.status, note: a.note?.trim() || undefined }
+      const next = { ...r, status: a.status, stageSince: at, steps: [...r.steps, step] }
+      const notifications = notify(state, [r.userId], { kind: 'request', title: `Request IT # ${r.no}: ${STATUS_FA[a.status]}`, body: step.note, link: { type: 'page', page: 'requests', requestId: r.id } })
+      return { ...state, adminRequests: state.adminRequests.map((request) => request.id === r.id ? next : request), notifications: [...notifications, ...state.notifications] }
+    }
     case 'reqDecide': return applyRequestDecide(state, a)
     case 'reqWithdraw': {
       const r = state.adminRequests.find((x) => x.id === a.id)!
       const step: RequestStep = { stage: 'withdraw', by: actor(state), at: nowIso() }
-      return { ...state, adminRequests: state.adminRequests.map((x) => (x.id === r.id ? { ...x, status: 'withdrawn', steps: [...x.steps, step] } : x)), audit: [auditOf(state, 'request', `درخواست ${KIND_FA[r.kind]} #${r.no} پس گرفته شد`), ...state.audit] }
+      return { ...state, adminRequests: state.adminRequests.map((x) => (x.id === r.id ? { ...x, status: 'withdrawn', steps: [...x.steps, step] } : x)), audit: r.kind === 'it' ? state.audit : [auditOf(state, 'request', `Request ${KIND_FA[r.kind]} # ${r.no} was withdrawn`), ...state.audit] }
     }
     case 'reqCancel': {
       const r = state.adminRequests.find((x) => x.id === a.id)!
       const step: RequestStep = { stage: 'cancel', by: actor(state), at: nowIso(), note: a.note.trim() }
-      const n = notify(state, [r.userId], { kind: 'request', title: `مرخصی #${r.no} شما لغو شد`, body: a.note.trim(), link: { type: 'page', page: 'requests' } })
+      const n = notify(state, [r.userId], { kind: 'request', title: `Leave # ${r.no} You Canceled`, body: a.note.trim(), link: { type: 'page', page: 'requests' } })
       return {
         ...state, leaves: state.leaves.filter((l) => l.requestId !== r.id),
         adminRequests: state.adminRequests.map((x) => (x.id === r.id ? { ...x, status: 'cancelled', steps: [...x.steps, step] } : x)), notifications: [...n, ...state.notifications],
-        audit: [auditOf(state, 'request', `مرخصی تأییدشده‌ی #${r.no} (${nameOf(state, r.userId)}) لغو شد — ${a.note.trim()}`), ...state.audit],
+        audit: [auditOf(state, 'request', `Approved leave # ${r.no} ${nameOf(state, r.userId)} Cancelled — ${a.note.trim()}`), ...state.audit],
       }
     }
     case 'tsSave': {
@@ -896,11 +915,11 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
         revisions: prev ? [...prev.revisions, { at: prev.updatedAt, by: prev.updatedBy, checkIn: prev.checkIn, checkOut: prev.checkOut, breakMinutes: prev.breakMinutes, note: prev.note, reason: a.reason?.trim() || undefined }] : [],
       }
       const other = a.userId !== me
-      const n = other ? notify(state, [a.userId], { kind: 'timesheet', title: `تایم‌شیت ${jalaliFa(a.date)} شما اصلاح شد`, body: `${nameOf(state, me)}: ${a.reason?.trim() ?? ''}`, link: { type: 'page', page: 'timesheet' } }) : []
-      const what = `${a.checkIn ?? '—'} تا ${a.checkOut ?? '—'}، استراحت ${a.breakMinutes} دقیقه`
+      const n = other ? notify(state, [a.userId], { kind: 'timesheet', title: `Your time sheet ${jalaliFa(a.date)} has been modified`, body: `${nameOf(state, me)}: ${a.reason?.trim() ?? ''}`, link: { type: 'page', page: 'timesheet' } }) : []
+      const what = `${a.checkIn ?? '—'} Up ${a.checkOut ?? '—'}, Rest ${a.breakMinutes} Minutes`
       return {
         ...state, timesheets: { ...state.timesheets, [k]: day }, notifications: [...n, ...state.notifications],
-        audit: [auditOf(state, 'timesheet', `${prev ? 'اصلاح' : 'ثبت'} تایم‌شیت ${other ? nameOf(state, a.userId) + ' ' : ''}${jalaliFa(a.date)}: ${what}${other ? ` — دلیل: ${a.reason?.trim()}` : ''}`), ...state.audit],
+        audit: [auditOf(state, 'timesheet', `${prev ? "Modifications" : "Log in"} Time Sheet ${other ? nameOf(state, a.userId) + ' ' : ''} ${jalaliFa(a.date)}: ${what} ${other ? ` — Reason: ${a.reason?.trim()}` : ''}`), ...state.audit],
       }
     }
     case 'tsPunch': {
@@ -913,12 +932,12 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const day: TimesheetDay = a.kind === 'in'
         ? { id: k, userId: me, date: TODAY, checkIn: now, breakMinutes: isOffDay(TODAY, new Set(state.holidays.map((h) => h.date))) ? 0 : cfg.minBreakMinutes, calc: EMPTY_CALC, updatedAt: at, updatedBy: me, revisions: [] }
         : { ...prev!, checkOut: now, updatedAt: at, updatedBy: me }
-      return { ...state, timesheets: { ...state.timesheets, [k]: day }, audit: [auditOf(state, 'timesheet', `${a.kind === 'in' ? 'ورود' : 'خروج'} ${now} ثبت شد (${jalaliFa(TODAY)})`), ...state.audit] }
+      return { ...state, timesheets: { ...state.timesheets, [k]: day }, audit: [auditOf(state, 'timesheet', `${a.kind === 'in' ? "Log in" : "Exit"} ${now} Registered ${jalaliFa(TODAY)}`), ...state.audit] }
     }
     case 'tsUnpaid': {
       const k = dayKey(actor(state), a.date)
       const d = state.timesheets[k]
-      return { ...state, timesheets: { ...state.timesheets, [k]: { ...d, otChoice: 'unpaid' } }, audit: [auditOf(state, 'timesheet', `اضافه‌کاری ${hm(d.calc.undecided)} در ${jalaliFa(a.date)} بدون درخواست ماند (بدون پرداخت)`), ...state.audit] }
+      return { ...state, timesheets: { ...state.timesheets, [k]: { ...d, otChoice: 'unpaid' } }, audit: [auditOf(state, 'timesheet', `Overtime ${hm(d.calc.undecided)} in ${jalaliFa(a.date)} remained unsolicited (no payment)`), ...state.audit] }
     }
     case 'monthClose': {
       const { from, to } = monthRange(a.month)
@@ -928,26 +947,26 @@ function apply(state: State, a: Exclude<Action, WorkspaceAction | OfficeAction>)
       const byUser = new Map<string, number>()
       for (const c of converted) byUser.set(c.next.userId, (byUser.get(c.next.userId) ?? 0) + c.prev.calc.undecided)
       const label = `${J_MONTHS[toJalali(from).jm - 1]} ${toJalali(from).jy}`
-      const n = [...byUser].flatMap(([uid, m]) => notify(state, [uid], { kind: 'timesheet', title: `ماه ${label} بسته شد`, body: `${faDigits(hm(m))} اضافه‌کاری بدون تعیین تکلیف، بدون پرداخت ثبت شد.`, link: { type: 'page', page: 'timesheet' } }))
+      const n = [...byUser].flatMap(([uid, m]) => notify(state, [uid], { kind: 'timesheet', title: `${label} was closed`, body: `${hm(m)} Overtime without assignment was recorded without payment.`, link: { type: 'page', page: 'timesheet' } }))
       const close: MonthClose = { month: a.month, from, to, by: actor(state), at: nowIso(), unpaidMinutes }
       return {
         ...state, timesheets: r.days, monthCloses: [...state.monthCloses, close], notifications: [...n, ...state.notifications],
-        audit: [auditOf(state, 'timesheet', `ماه ${label} بسته شد؛ ${converted.length} روز با ${hm(unpaidMinutes)} اضافه‌کاری بدون تعیین تکلیف، بدون پرداخت ثبت شد`), ...state.audit],
+        audit: [auditOf(state, 'timesheet', `The moon ${label} was closed; ${converted.length} the day was recorded with ${hm(unpaidMinutes)} overtime without assignment, without payment`), ...state.audit],
       }
     }
     case 'tsConfig': {
       const prev = state.timesheetConfigs[state.timesheetConfigs.length - 1]
       const cfg: TimesheetConfig = { ...a.config, version: prev.version + 1, reason: a.reason.trim(), by: actor(state), at: nowIso() }
-      return { ...state, timesheetConfigs: [...state.timesheetConfigs, cfg], audit: [auditOf(state, 'timesheet', `قواعد تایم‌شیت نسخه‌ی ${cfg.version} از ${jalaliFa(cfg.from)}: کار خالص ${hm(cfg.dutyNetMinutes)}، استراحت ${cfg.minBreakMinutes} دقیقه، مهلت اصلاح ${cfg.editDays} روز — ${cfg.reason}`), ...state.audit] }
+      return { ...state, timesheetConfigs: [...state.timesheetConfigs, cfg], audit: [auditOf(state, 'timesheet', `Rules of Time Sheet Version ${cfg.version} ${jalaliFa(cfg.from)}: Pure Work ${hm(cfg.dutyNetMinutes)}, Rest ${cfg.minBreakMinutes} Minutes, Reform Deadline ${cfg.editDays} Day — ${cfg.reason}`), ...state.audit] }
     }
     case 'internalProjectUpdate': {
       const ip = state.internalProjects.find((p) => p.id === a.id)!
-      return { ...state, internalProjects: state.internalProjects.map((p) => (p.id === a.id ? { ...p, ...a.patch } : p)), audit: [auditOf(state, 'task', `پروژه‌ی داخلی «${ip.name}» ویرایش شد`), ...state.audit] }
+      return { ...state, internalProjects: state.internalProjects.map((p) => (p.id === a.id ? { ...p, ...a.patch } : p)), audit: [auditOf(state, 'task', `Internal project “${ip.name}” updated`), ...state.audit] }
     }
   }
 }
 
 /** Fresh state for tests (no URL or storage) */
 export function initialState(): State {
-  return { ...buildSeed(), ...emptyWorkspace(), ...emptyOffice(), writeQueue: [], lastRead: {}, session: null, persianDigits: true, nav: { page: 'home' }, openTaskId: null, profileUserId: null, profileTab: 'profile', theme: 'system', denial: null }
+  return { ...buildSeed(), ...emptyWorkspace(), ...emptyOffice(), roleDefinitions: {}, whiteboards: {}, writeQueue: [], lastRead: {}, session: null, nav: { page: 'home' }, openTaskId: null, profileUserId: null, profileTab: 'profile', theme: 'system', denial: null }
 }

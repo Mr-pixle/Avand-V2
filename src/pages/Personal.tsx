@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useFmt, useStore } from '@/lib/store'
+import { navigationSelection } from '@/lib/navigation'
 import { TODAY } from '@/lib/seed'
 import { addDays } from '@/lib/jalali'
 import { ancestorsOf, isDone, statusOfTask, subProgress } from '@/lib/personal'
@@ -20,8 +21,9 @@ import { PersonalTimeline } from '@/components/PersonalTimeline'
 
 export function PersonalPage() {
   const { board, list } = useMine()
+  const { state, dispatch } = useStore()
   const { n } = useFmt()
-  const [view, setView] = useState<'kanban' | 'timeline'>('kanban')
+  const { value: view, onChange: setView } = navigationSelection(state.nav, dispatch, 'taskView', 'kanban', ['kanban', 'timeline'])
   const [q, setQ] = useState('')
   const [withSubs, setWithSubs] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -42,14 +44,14 @@ export function PersonalPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader eyebrow="کار" title="کارهای شخصی"
-        actions={<div className="flex gap-2"><Button variant="outline" onClick={() => setStatusOpen(true)}><Settings2 className="h-4 w-4" /> Statusها</Button><Button onClick={() => setNewOpen({})}><Plus className="h-4 w-4" /> کار تازه</Button></div>}>
-        <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> فهرست خصوصی شما.</span> هیچ‌کس دیگر، حتی مدیران، آن را نمی‌بیند و در برنامه‌ریزی، تقویم کاری، Workload و گزارش‌های سازمانی شمرده نمی‌شود.
+      <PageHeader eyebrow="Workspace" title="Personal Tasks"
+        actions={<div className="flex gap-2"><Button variant="outline" onClick={() => setStatusOpen(true)}><Settings2 className="h-4 w-4" /> Statuses</Button><Button onClick={() => setNewOpen({})}><Plus className="h-4 w-4" /> New Task</Button></div>}>
+        <span className="inline-flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Your private task list.</span> No one else, not even managers, sees it and is counted in planning, working calendars, workloads, and organizational reports.
       </PageHeader>
       <StickyNotes />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="خلاصه">
-        {[['باز', open.length, ''], ['گذشته از موعد', overdue, overdue ? 'text-destructive' : ''], ['موعد امروز', today, today ? 'text-azure-ink' : ''], ['هفت روز آینده', week, '']].map(([k, v, c]) => (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Summary">
+        {[['Open', open.length, ''], ['Overdue', overdue, overdue ? 'text-destructive' : ''], ['Due Today', today, today ? 'text-azure-ink' : ''], ['Next Seven Days', week, '']].map(([k, v, c]) => (
           <div key={k as string} className="glass-card px-3 py-2"><div className="text-[11px] text-muted-foreground">{k}</div><div className={cn('num text-[18px] font-bold', c as string)}>{n(v as number)}</div></div>
         ))}
       </div>
@@ -58,17 +60,17 @@ export function PersonalPage() {
         <Segmented compact value={view} onChange={setView} options={[{ value: 'kanban', label: 'Kanban', icon: <Columns3 className="h-3.5 w-3.5" /> }, { value: 'timeline', label: 'Timeline', icon: <ChartGantt className="h-3.5 w-3.5" /> }]} />
         <div className="relative min-w-[180px] flex-1 sm:max-w-[280px]">
           <Search className="pointer-events-none absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input id="pt-search" aria-label="جست‌وجو در کارهای شخصی" className="h-9 ps-8" value={q} onChange={(e) => setQ(e.target.value)} placeholder="جست‌وجو…" />
+          <Input id="pt-search" aria-label="Search personal tasks" className="h-9 ps-8" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
         </div>
-        {view === 'kanban' && <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px]"><Checkbox checked={withSubs} onCheckedChange={(v) => setWithSubs(!!v)} />Subtaskها هم کارت شوند</label>}
+        {view === 'kanban' && <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px]"><Checkbox checked={withSubs} onCheckedChange={(v) => setWithSubs(!!v)} />Subtasks are also carded</label>}
       </div>
 
       {list.length === 0 ? (
         <section className="glass-card flex flex-col items-center gap-3 px-4 py-10 text-center">
           <ListChecks className="h-8 w-8 text-muted-foreground" />
-          <div className="text-[15px] font-semibold">هنوز کار شخصی‌ای ندارید</div>
-          <p className="max-w-md text-[12.5px] text-muted-foreground">کارهای خودتان را — از مطالعه و دوره تا کارهای روزمره — اینجا بنویسید، Subtask بسازید و با Kanban و Timeline دنبالشان کنید. Statusها را هم هر طور بخواهید تنظیم کنید.</p>
-          <Button onClick={() => setNewOpen({})}><Plus className="h-4 w-4" /> اولین کار</Button>
+          <div className="text-[15px] font-semibold">No personal tasks yet.</div>
+          <p className="max-w-md text-[12.5px] text-muted-foreground">Write down your work — from study and course to day-to-day tasks — here, create Subtask and follow them with Kanban and Timeline.</p>
+          <Button onClick={() => setNewOpen({})}><Plus className="h-4 w-4" /> Create a Task</Button>
         </section>
       ) : view === 'kanban'
         ? <PersonalKanban tasks={filtered.filter((t) => withSubs || !t.parentId)} showParent={withSubs} onOpen={setOpenId} onAdd={(statusId) => setNewOpen({ statusId })} />
@@ -96,7 +98,7 @@ function PersonalKanban({ tasks, showParent, onOpen, onAdd }: { tasks: PersonalT
   const addQuick = () => {
     if (!quick?.title.trim()) { setQuick(null); return }
     dispatch({ type: 'ptCreate', task: { title: quick.title, statusId: quick.statusId } })
-    toast.success('کار شخصی ساخته شد')
+    toast.success('Personal task created')
     setQuick({ ...quick, title: '' })
   }
   return (
@@ -106,14 +108,14 @@ function PersonalKanban({ tasks, showParent, onOpen, onAdd }: { tasks: PersonalT
           {board.statuses.map((s) => {
             const col = sorted.filter((t) => statusOfTask(board, t).id === s.id)
             return (
-              <div key={s.id} data-status={s.id} role="list" aria-label={`ستون ${s.name}`}
+              <div key={s.id} data-status={s.id} role="list" aria-label={`Column ${s.name}`}
                 onDragOver={(e) => { e.preventDefault(); setOver(s.id) }}
                 onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
                 onDrop={(e) => { e.preventDefault(); setOver(null); drop(e.dataTransfer.getData('text/plain'), s.id) }}
                 className={cn('glass-well flex w-[258px] shrink-0 flex-col transition-[background-color,box-shadow] duration-150', over === s.id && 'border-azure bg-azure-soft')}>
                 <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
                   <StatusChip s={s} />
-                  <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{s.id === board.defaultStatusId && <span>پیش‌فرض</span>}<span className="num font-semibold text-foreground">{n(col.length)}</span></span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{s.id === board.defaultStatusId && <span>Default</span>}<span className="num font-semibold text-foreground">{n(col.length)}</span></span>
                 </div>
                 <div className="flex max-h-[560px] min-h-[120px] flex-col gap-2 overflow-y-auto p-2 thin-scroll">
                   {col.map((t) => {
@@ -134,22 +136,22 @@ function PersonalKanban({ tasks, showParent, onOpen, onAdd }: { tasks: PersonalT
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                           <PriorityChip p={t.priority} />
                           {p.total > 0 && (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground" title="Subtaskهای تکمیل‌شده">
+                            <span className="inline-flex items-center gap-1 text-muted-foreground" title="Completed subtasks">
                               <ListChecks className="h-3.5 w-3.5" /><span className="num">{n(p.done)}/{n(p.total)}</span>
                               <span className="h-1 w-10 overflow-hidden rounded-full bg-secondary"><span className="block h-full bg-leaf" style={{ width: `${(p.done / p.total) * 100}%` }} /></span>
                             </span>
                           )}
-                          {(t.start || t.due) && <span className={cn('num ms-auto inline-flex items-center gap-1', late ? 'font-semibold text-destructive' : 'text-muted-foreground')}><CalendarClock className="h-3 w-3" />{t.start && t.due && t.start !== t.due ? `${d(t.start).slice(5)} تا ${d(t.due).slice(5)}` : d(t.due ?? t.start).slice(5)}</span>}
+                          {(t.start || t.due) && <span className={cn('num ms-auto inline-flex items-center gap-1', late ? 'font-semibold text-destructive' : 'text-muted-foreground')}><CalendarClock className="h-3 w-3" />{t.start && t.due && t.start !== t.due ? `${d(t.start).slice(5)} Up to ${d(t.due).slice(5)}` : d(t.due ?? t.start).slice(5)}</span>}
                         </div>
                       </div>
                     )
                   })}
                   {quick?.statusId === s.id ? (
-                    <Input autoFocus aria-label={`کار تازه در ${s.name}`} className="h-9" value={quick.title} placeholder="عنوان… (Enter)" onChange={(e) => setQuick({ ...quick, title: e.target.value })}
+                    <Input autoFocus aria-label={`New Task ${s.name}`} className="h-9" value={quick.title} placeholder="Title… (Enter)" onChange={(e) => setQuick({ ...quick, title: e.target.value })}
                       onKeyDown={(e) => { if (e.key === 'Enter') addQuick(); if (e.key === 'Escape') setQuick(null) }} onBlur={() => { if (!quick.title.trim()) setQuick(null) }} />
                   ) : (
                     <button type="button" className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => setQuick({ statusId: s.id, title: '' })} onDoubleClick={() => onAdd(s.id)}>
-                      <Plus className="h-3.5 w-3.5" /> افزودن
+                      <Plus className="h-3.5 w-3.5" /> Add
                     </button>
                   )}
                 </div>
@@ -158,7 +160,7 @@ function PersonalKanban({ tasks, showParent, onOpen, onAdd }: { tasks: PersonalT
           })}
         </div>
       </div>
-      <p className="text-[11.5px] text-muted-foreground">کارت را بکشید و در ستون دیگر رها کنید تا Status آن عوض شود. روی موبایل، کارت را باز کنید و Status را انتخاب کنید.</p>
+      <p className="text-[11.5px] text-muted-foreground">Pull the card and drop it in the other column to change its status. On the mobile, open the card and select Status.</p>
     </div>
   )
 }

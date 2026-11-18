@@ -84,10 +84,10 @@ export function jMonthLength(jy: number, jm: number) {
   return jalCal(jy).leap === 0 ? 30 : 29
 }
 
-export const J_MONTHS = ['فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور', 'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند']
+export const J_MONTHS = ['Farvardin', 'Ordibehesht', 'Khordad', 'Tir', 'Mordad', 'Shahrivar', 'Mehr', 'Aban', 'Azar', 'Dey', 'Bahman', 'Esfand']
 // Week starts on Saturday. Index 0 = شنبه … 6 = جمعه
-export const WEEKDAYS = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
-export const WEEKDAYS_SHORT = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج']
+export const WEEKDAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+export const WEEKDAYS_SHORT = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
 // ---- ISO date arithmetic (UTC based, no DST surprises) ----
 export function isoFromDate(d: Date) {
@@ -143,5 +143,5 @@ export function tehranTime(d: Date = new Date()) { return TEH_TIME.format(d) }
 /** "۱۴۰۵/۰۸/۰۴" — for stored message text (notification bodies) */
 export function jalaliFa(iso: string) {
   const j = toJalali(iso)
-  return `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`.replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[+d])
+  return `${j.jy}/${String(j.jm).padStart(2, '0')}/${String(j.jd).padStart(2, '0')}`
 }

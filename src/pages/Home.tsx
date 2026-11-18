@@ -1,3 +1,6 @@
+import { projectTypeLabel, systemLabel } from '@/lib/displayLabels'
+import { OverviewHeading, StudioOverview } from '@/components/StudioOverview'
+import { TeamName } from '@/components/ItemIcon'
 import { StickyNotes } from '@/components/PersonalNotes'
 import { useMemo, useState } from 'react'
 import { Camera, Inbox, MessagesSquare, Phone, UserPen } from 'lucide-react'
@@ -6,11 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { projectPeople } from '@/lib/organization'
 import { projectTeams, statusOf, useFmt, useStore } from '@/lib/store'
+import { navigationSelection } from '@/lib/navigation'
 import { TODAY } from '@/lib/seed'
-import { WEEKDAYS, addDays, startOfWeek, weekdayIndex } from '@/lib/jalali'
+import { addDays, startOfWeek } from '@/lib/jalali'
 import type { StatusCategory, Task } from '@/lib/types'
 import { TaskViews } from '@/components/TaskViews'
-import { Bar, Empty, Initials, PageHeader, ProgressRing, Segmented, StatusPill } from '@/components/common'
+import { Bar, Empty, Initials, ProgressRing, Segmented, StatusPill } from '@/components/common'
 import { ROLE_FA, has } from '@/lib/policy'
 import { TimesheetTodayCard } from '@/pages/AdminModule'
 import { MyFlowWork } from '@/components/FlowViews'
@@ -35,7 +39,7 @@ function UserCard() {
   return (
     <section className="flex flex-col glass-card">
       <div className="flex items-start gap-3 border-b p-4">
-        <button onClick={() => dispatch({ type: 'openProfile', id: me.id })} className="group relative shrink-0 rounded-full" aria-label="تغییر تصویر پروفایل" title="تغییر تصویر پروفایل">
+        <button onClick={() => dispatch({ type: 'openProfile', id: me.id })} className="group relative shrink-0 rounded-full" aria-label="Change Profile Picture" title="Change Profile Picture">
           <Initials user={me} size={56} />
           <span className="absolute -bottom-0.5 -end-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-background"><Camera className="h-3 w-3" /></span>
         </button>
@@ -46,19 +50,19 @@ function UserCard() {
             <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-medium', me.role === 'ceo' || me.role === 'sysadmin' ? 'bg-foreground text-background' : ['control', 'management', 'pm', 'inspector'].includes(me.role) ? 'bg-azure-soft text-azure-ink' : 'bg-secondary')}>{ROLE_FA[me.role]}</span>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => dispatch({ type: 'openProfile', id: me.id })} aria-label="ویرایش پروفایل"><UserPen className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => dispatch({ type: 'openProfile', id: me.id })} aria-label="Edit Profile"><UserPen className="h-4 w-4" /></Button>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 p-4 text-[13px]">
-        <div><dt className="eyebrow">تیم</dt><dd className="font-medium">{teamById[me.teamId]?.name ?? '—'}</dd></div>
-        <div><dt className="eyebrow">سمت</dt><dd className="font-medium">{me.title ?? '—'}</dd></div>
-        <div><dt className="eyebrow">تماس</dt><dd className="num inline-flex items-center gap-1 font-medium"><Phone className="h-3 w-3 text-muted-foreground" />{me.phone ? me.phone.replace(/\d+/g, (x) => n(Number(x))) : '—'}</dd></div>
-        <div><dt className="eyebrow">کارهای باز</dt><dd className="num font-medium">{n(open)}</dd></div>
-        <div><dt className="eyebrow">عضو از</dt><dd className="num font-medium">{dLong(me.createdAt.slice(0, 10))}</dd></div>
-        {me.bio && <div className="col-span-2"><dt className="eyebrow">درباره</dt><dd className="text-muted-foreground">{me.bio}</dd></div>}
+        <div><dt className="eyebrow">Team</dt><dd className="font-medium"><TeamName team={teamById[me.teamId]} /></dd></div>
+        <div><dt className="eyebrow">Job Title</dt><dd className="font-medium">{me.title ? systemLabel(me.title) : '—'}</dd></div>
+        <div><dt className="eyebrow">Phone</dt><dd className="num inline-flex items-center gap-1 font-medium"><Phone className="h-3 w-3 text-muted-foreground" />{me.phone ? me.phone.replace(/\d+/g, (x) => n(Number(x))) : '—'}</dd></div>
+        <div><dt className="eyebrow">Open Tasks</dt><dd className="num font-medium">{n(open)}</dd></div>
+        <div><dt className="eyebrow">Member since</dt><dd className="num font-medium">{dLong(me.createdAt.slice(0, 10))}</dd></div>
+        {me.bio && <div className="col-span-2"><dt className="eyebrow">About</dt><dd className="text-muted-foreground">{me.bio}</dd></div>}
       </dl>
       <div className="mt-auto flex items-center justify-between border-t px-4 py-2.5 text-[12.5px]">
-        <button className="text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'notifications' } })}><span className="num">{n(myNotifs.filter((x) => !x.read).length)}</span> اعلان خوانده‌نشده</button>
-        <button className="text-muted-foreground hover:text-foreground" onClick={() => dispatch({ type: 'openProfile', id: me.id })}>ویرایش پروفایل</button>
+        <button className="text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'notifications' } })}><span className="num">{n(myNotifs.filter((x) => !x.read).length)}</span>  unread notifications</button>
+        <button className="text-muted-foreground hover:text-foreground" onClick={() => dispatch({ type: 'openProfile', id: me.id })}>Edit Profile</button>
       </div>
     </section>
   )
@@ -82,10 +86,10 @@ function MyProjects() {
   return (
     <section className="min-w-0">
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 className="text-[15px] font-bold">پروژه‌های من</h2>
-        <span className="text-[12px] text-muted-foreground">{has(me, 'plan.all') ? 'به‌عنوان مدیریت یا کنترل پروژه، همه‌ی پروژه‌ها' : me.role === 'pm' ? 'پروژه‌هایی که مدیر آن هستید یا در آن کار دارید' : 'پروژه‌هایی که شما یا تیمتان در آن کار دارید'}</span>
+        <h2 className="text-[15px] font-bold">My Projects</h2>
+        <span className="text-[12px] text-muted-foreground">{has(me, 'plan.all') ? 'All projects available to management and project controls' : me.role === 'pm' ? 'Projects you manage or work on' : 'Projects assigned to you or your team'}</span>
       </div>
-      {rows.length === 0 ? <Empty title="هنوز در پروژه‌ای کاری ندارید" hint="وقتی کنترل پروژه تسکی به شما یا تیمتان بدهد، پروژه اینجا دیده می‌شود." /> : (
+      {rows.length === 0 ? <Empty title="No assigned projects yet." hint="Projects appear here when work is assigned to you or your team." /> : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
           {rows.map(({ p, open, next, team, related }) => (
             <div key={p.id} className="glass-item is-interactive flex flex-col overflow-hidden rounded-2xl">
@@ -93,19 +97,19 @@ function MyProjects() {
                 <ProgressRing project value={progress(p.id).total} size={40} stroke={3.5} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{p.name}</div>
-                    {progress(p.id).unclassified.length > 0 && <div className="text-[11px] text-muted-foreground">پیشرفت مراحل طبقه‌بندی‌شده؛ {n(progress(p.id).unclassified.length)} تسک بدون مرحله</div>}
-                  <div className="text-[11.5px] text-muted-foreground"><span className="mono">{p.code}</span>، {p.type}</div>
+                    {progress(p.id).unclassified.length > 0 && <div className="text-[11px] text-muted-foreground">Stage progress · {n(progress(p.id).unclassified.length)} unclassified tasks</div>}
+                  <div className="text-[11.5px] text-muted-foreground"><span className="mono">{p.code}</span>, {projectTypeLabel(p.type)}</div>
                 </div>
               </button>
               <div className="grid grid-cols-3 gap-2 border-t px-3 py-2 text-[12px]">
-                <div><div className="eyebrow">کارهای باز من</div><div className="num font-semibold">{n(open.length)}</div></div>
-                <div><div className="eyebrow">تسک‌های تیم</div><div className="num font-semibold">{n(team)}</div></div>
-                <div><div className="eyebrow">موعد بعدی</div><div className="num font-semibold">{next ? d(next.due).slice(5) : '—'}</div></div>
+                <div><div className="eyebrow">My Open Tasks</div><div className="num font-semibold">{n(open.length)}</div></div>
+                <div><div className="eyebrow">Team Tasks</div><div className="num font-semibold">{n(team)}</div></div>
+                <div><div className="eyebrow">Next Due Date</div><div className="num font-semibold">{next ? d(next.due).slice(5) : '—'}</div></div>
               </div>
               <div className="mt-auto flex items-center justify-between border-t px-3 py-2 text-[12px]">
-                <span className="truncate text-muted-foreground">{related ? `از طریق تیم ${teamById[me.teamId]?.name}` : 'نظارت'}</span>
+                <span className="truncate text-muted-foreground">{related ? `Via ${teamById[me.teamId]?.name}` : 'Supervision'}</span>
                 <button className="inline-flex items-center gap-1 text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'pchat', channelId: `project:${p.id}` } })}>
-                  <MessagesSquare className="h-3.5 w-3.5" /> چت پروژه{unreadIn(`project:${p.id}`) ? <span className="num rounded-full bg-azure px-1.5 text-[10.5px] text-white">{n(unreadIn(`project:${p.id}`))}</span> : null}
+                  <MessagesSquare className="h-3.5 w-3.5" /> Project Chat{unreadIn(`project:${p.id}`) ? <span className="num rounded-full bg-azure px-1.5 text-[10.5px] text-azure-foreground">{n(unreadIn(`project:${p.id}`))}</span> : null}
                 </button>
               </div>
             </div>
@@ -128,11 +132,11 @@ function StatusMix({ tasks }: { tasks: Task[] }) {
   const cats = (['done', 'doing', 'todo'] as StatusCategory[]).filter((c) => counts[c] > 0)
   return (
     <div>
-      <div className="flex h-4 w-full gap-[2px]" role="img" aria-label={cats.map((c) => `${CAT_LABEL[c]}: ${counts[c]}`).join('، ')}>
+      <div className="flex h-4 w-full gap-[2px]" role="img" aria-label={cats.map((c) => `${CAT_LABEL[c]}: ${counts[c]}`).join(', ')}>
         {cats.map((c, i) => (
           <div key={c} className={cn('group relative h-full', i === 0 && 'rounded-s', i === cats.length - 1 && 'rounded-e')} style={{ width: `${(counts[c] / total) * 100}%`, background: CAT_VAR[c], minWidth: 4 }}>
             <span className="pointer-events-none absolute bottom-full start-1/2 z-10 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-[11px] text-background group-hover:block rtl:translate-x-1/2">
-              {CAT_LABEL[c]}: {n(counts[c])} تسک ({pct((counts[c] / total) * 100)})
+              {CAT_LABEL[c]}: {n(counts[c])} tasks ({pct((counts[c] / total) * 100)})
             </span>
           </div>
         ))}
@@ -177,26 +181,26 @@ function TaskDashboard() {
   return (
     <section className="min-w-0">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[15px] font-bold">داشبورد وظایف</h2>
-        <Segmented size="sm" value={scope} onChange={setScope} options={[{ value: 'me', label: 'کارهای من' }, { value: 'team', label: 'تیم من' }, { value: 'office', label: 'کل دفتر' }]} />
+        <h2 className="text-[15px] font-bold">Task Dashboard</h2>
+        <Segmented size="sm" value={scope} onChange={setScope} options={[{ value: 'me', label: 'My Tasks' }, { value: 'team', label: 'My Team' }, { value: 'office', label: 'All Studio' }]} />
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)]">
         <div className="glass-card p-4">
-          <div className="mb-3 flex items-baseline justify-between"><span className="text-[13px] font-semibold">وضعیت {n(scoped.length)} تسک</span><span className="text-[11.5px] text-muted-foreground">بر اساس Category هر Status</span></div>
-          {scoped.length ? <StatusMix tasks={scoped} /> : <p className="text-[12.5px] text-muted-foreground">تسکی در این دامنه نیست.</p>}
+          <div className="mb-3 flex items-baseline justify-between"><span className="text-[13px] font-semibold">Status {n(scoped.length)} tasks</span><span className="text-[11.5px] text-muted-foreground">By status category</span></div>
+          {scoped.length ? <StatusMix tasks={scoped} /> : <p className="text-[12.5px] text-muted-foreground">No tasks match this scope.</p>}
           <div className="mt-4 grid grid-cols-2 gap-2 border-t pt-3 text-[12px]">
-            <div><div className="eyebrow">گذشته از موعد</div><div className={cn('num text-[16px] font-bold', overdue.length && 'text-destructive')}>{n(overdue.length)}</div></div>
-            <div><div className="eyebrow">موعد ۱۰ روز آینده</div><div className="num text-[16px] font-bold">{n(upcoming.length)}</div></div>
+            <div><div className="eyebrow">Overdue</div><div className={cn('num text-[16px] font-bold', overdue.length && 'text-destructive')}>{n(overdue.length)}</div></div>
+            <div><div className="eyebrow">Due in the Next 10 Days</div><div className="num text-[16px] font-bold">{n(upcoming.length)}</div></div>
           </div>
         </div>
         <div className="flex min-w-0 flex-col glass-card">
-          <div className="border-b px-4 py-2.5 text-[13px] font-semibold">موعدهای پیش رو</div>
-          {upcoming.length === 0 ? <p className="px-4 py-4 text-[12.5px] text-muted-foreground">در ۱۰ روز آینده موعدی نیست.</p> : (
+          <div className="border-b px-4 py-2.5 text-[13px] font-semibold">Upcoming Deadlines</div>
+          {upcoming.length === 0 ? <p className="px-4 py-4 text-[12.5px] text-muted-foreground">No deadlines in the next 10 days.</p> : (
             <ul className="max-h-[300px] divide-y overflow-y-auto thin-scroll">
               {upcoming.slice(0, 12).map((t) => (
                 <li key={t.id}>
                   <button className="flex w-full items-center gap-3 px-4 py-2 text-start hover:bg-foreground/[0.035]" onClick={() => dispatch({ type: 'openTask', id: t.id })}>
-                    <span className="num w-14 shrink-0 text-[12px] font-semibold">{t.due === TODAY ? 'امروز' : dShort(t.due!)}</span>
+                    <span className="num w-14 shrink-0 text-[12px] font-semibold">{t.due === TODAY ? 'Today' : dShort(t.due!)}</span>
                     <span className="min-w-0 flex-1"><span className="block truncate text-[12.5px]">{t.name}</span><span className="block truncate text-[11px] text-muted-foreground">{store.projectById[t.projectId]?.name}</span></span>
                     <span className="hidden shrink-0 sm:block"><StatusPill task={t} status={statusOf(state, t)} /></span>
                   </button>
@@ -207,34 +211,34 @@ function TaskDashboard() {
         </div>
         <div className="flex min-w-0 flex-col glass-card lg:col-span-2 2xl:col-span-1">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
-            <span className="text-[13px] font-semibold">وظایف اعضا{scope !== 'office' ? `، تیم ${teamById[me.teamId]?.name}` : ''}</span>
+            <span className="text-[13px] font-semibold">Team Workload{scope !== 'office' ? ` · ${teamById[me.teamId]?.name}` : ''}</span>
             {scope === 'office' && (
               <Select value={teamFilter} onValueChange={setTeamFilter}>
                 <SelectTrigger id="dash-team" className="h-7 w-[150px] text-[12px]"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">همه‌ی تیم‌ها</SelectItem>{state.teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="all">All Teams</SelectItem>{state.teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
               </Select>
             )}
           </div>
           <div className="scroll-x thin-scroll">
             <table className="w-full min-w-[440px] text-[12.5px]">
-              <thead className="text-[11px] text-muted-foreground"><tr className="border-b"><th className="px-4 py-1.5 text-start font-medium">نفر</th><th className="px-2 py-1.5 text-end font-medium">باز</th><th className="px-2 py-1.5 text-end font-medium">در جریان</th><th className="px-2 py-1.5 text-end font-medium">دیرکرد</th><th className="w-[130px] px-4 py-1.5 text-start font-medium">بار این هفته</th></tr></thead>
+              <thead className="text-[11px] text-muted-foreground"><tr className="border-b"><th className="px-4 py-1.5 text-start font-medium">Member</th><th className="px-2 py-1.5 text-end font-medium">Open</th><th className="px-2 py-1.5 text-end font-medium">In Progress</th><th className="px-2 py-1.5 text-end font-medium">Overdue</th><th className="w-[130px] px-4 py-1.5 text-start font-medium">Weekly Utilization</th></tr></thead>
               <tbody>
                 {(showAll ? people : people.slice(0, 8)).map(({ u, open: o, doing, overdue: od, cap, used }) => {
                   const ratio = cap ? (used / cap) * 100 : 0
                   return (
                     <tr key={u.id} className={cn('border-b last:border-0', u.id === me.id && 'bg-azure-soft/30')}>
-                      <td className="px-4 py-1.5"><span className="flex items-center gap-2"><Initials user={u} size={20} /><span className="truncate">{u.name}</span>{scope === 'office' && <span className="hidden text-[11px] text-muted-foreground md:inline">{teamById[u.teamId]?.name}</span>}</span></td>
+                      <td className="px-4 py-1.5"><span className="flex items-center gap-2"><Initials user={u} size={20} /><span className="truncate">{u.name}</span>{scope === 'office' && <span className="hidden text-[11px] text-muted-foreground md:inline"><TeamName team={teamById[u.teamId]} /></span>}</span></td>
                       <td className="num px-2 py-1.5 text-end">{n(o)}</td>
                       <td className="num px-2 py-1.5 text-end">{n(doing)}</td>
                       <td className={cn('num px-2 py-1.5 text-end', od > 0 && 'font-semibold text-destructive')}>{n(od)}</td>
-                      <td className="px-4 py-1.5" title={`${h(used)} از ${h(cap)}`}><div className="flex items-center gap-2"><Bar value={ratio} tone={ratio > 100 ? 'danger' : undefined} /><span className="num w-9 shrink-0 text-end text-[11px] text-muted-foreground">{n(Math.round(ratio))}٪</span></div></td>
+                      <td className="px-4 py-1.5" title={`${h(used)} of ${h(cap)}`}><div className="flex items-center gap-2"><Bar value={ratio} tone={ratio > 100 ? 'danger' : undefined} /><span className="num w-9 shrink-0 text-end text-[11px] text-muted-foreground">{n(Math.round(ratio))}%</span></div></td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
-          {people.length > 8 && <button className="mt-auto border-t px-4 py-2 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setShowAll(!showAll)}>{showAll ? 'نمایش کمتر' : `نمایش همه (${n(people.length)} نفر)`}</button>}
+          {people.length > 8 && <button className="mt-auto border-t px-4 py-2 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setShowAll(!showAll)}>{showAll ? 'Show less' : `Show all (${n(people.length)} people)`}</button>}
         </div>
       </div>
     </section>
@@ -243,8 +247,8 @@ function TaskDashboard() {
 
 export function Home() {
   const store = useStore()
-  const { state, me, workItems, planner, activeUsers } = store
-  const { n, dLong } = useFmt()
+  const { state, dispatch, me, workItems, planner, activeUsers } = store
+  const { n } = useFmt()
   const myTasks = useMemo(() => workItems.filter((t) => t.assigneeUserId === me.id), [workItems, me.id])
   const week0 = startOfWeek(TODAY)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(week0, i))
@@ -257,10 +261,10 @@ export function Home() {
       const cap = weekDays.reduce((s, d) => s + p.capacity({ kind: 'user', id: me.id }, d), 0)
       const used = weekDays.reduce((s, d) => s + p.used({ kind: 'user', id: me.id }, d), 0)
       return {
-        a: { label: 'کارهای باز من', value: n(o.length) },
-        b: { label: 'موعد این هفته', value: n(o.filter((t) => t.due && t.due >= week0 && t.due <= addDays(week0, 6)).length) },
-        c: { label: 'گذشته از موعد', value: n(o.filter((t) => t.due && t.due < TODAY).length), alert: o.some((t) => t.due && t.due < TODAY) },
-        load: { used, cap, label: 'بار من در این هفته' },
+        a: { label: 'My Open Tasks', value: n(o.length) },
+        b: { label: 'Due This Week', value: n(o.filter((t) => t.due && t.due >= week0 && t.due <= addDays(week0, 6)).length) },
+        c: { label: 'Overdue', value: n(o.filter((t) => t.due && t.due < TODAY).length), alert: o.some((t) => t.due && t.due < TODAY) },
+        load: { used, cap, label: 'My Weekly Utilization' },
       }
     }
     const o = open(workItems)
@@ -270,33 +274,32 @@ export function Home() {
     const late = o.filter((t) => t.due && t.due < TODAY).length
     // Sync Review belongs to the Project Control section: shown only to the CEO and Project Control
     return {
-      a: { label: 'تسک‌های در حال انجام در دفتر', value: n(o.length) },
-      b: { label: 'تسک‌های تخصیص‌نیافته', value: n(o.filter((t) => !t.assigneeUserId && !t.assigneeTeamId).length) },
-      c: has(me, 'control.section') ? { label: 'در صف Sync Review', value: n(pending), alert: pending > 0 } : { label: 'گذشته از موعد دفتر', value: n(late), alert: late > 0 },
-      load: { used, cap, label: 'ظرفیت برنامه‌ریزی‌شده' },
+      a: { label: 'Open Studio Tasks', value: n(o.length) },
+      b: { label: 'Unassigned Tasks', value: n(o.filter((t) => !t.assigneeUserId && !t.assigneeTeamId).length) },
+      c: has(me, 'control.section') ? { label: 'Pending Sync Review', value: n(pending), alert: pending > 0 } : { label: 'Studio Overdue Tasks', value: n(late), alert: late > 0 },
+      load: { used, cap, label: 'Planned Utilization' },
     }
   }, [state, workItems, myTasks, me, n, week0, planner, weekDays, activeUsers])
 
   const pct = stats.load.cap ? (stats.load.used / stats.load.cap) * 100 : 0
   const teamOrder = [...state.teams].sort((a, b) => (a.id === me.teamId ? -1 : b.id === me.teamId ? 1 : 0))
+  const tabs = navigationSelection(state.nav, dispatch, 'tab', 'mine', ['mine', ...teamOrder.map(team => team.id)])
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader eyebrow={`${WEEKDAYS[weekdayIndex(TODAY)]} ${dLong(TODAY)}`} title={me.name === 'مدیرعامل' ? 'سلام، مدیرعامل' : `سلام، ${me.name.split(' ')[0]}`}
-        actions={<Button variant="outline" onClick={() => store.dispatch({ type: 'openProfile', id: me.id })}><UserPen className="h-4 w-4" /> ویرایش پروفایل</Button>}>
-        خلاصه‌ی کارها، پروژه‌ها و وظایف شما
-      </PageHeader>
+      <OverviewHeading className="lg:hidden" />
+      <StudioOverview utilization={pct} hasCapacity={stats.load.cap > 0} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
         <UserCard />
         <div className="flex min-w-0 flex-col gap-5">
           {me.role !== 'ceo' && <TimesheetTodayCard />}
           <StickyNotes dashboard />
-          <div className="grid grid-cols-2 divide-x divide-x-reverse overflow-hidden glass-card lg:grid-cols-4 [&>*]:border-b lg:[&>*]:border-b-0">
+          <div className="grid grid-cols-2 divide-x  overflow-hidden glass-card lg:grid-cols-4 [&>*]:border-b lg:[&>*]:border-b-0">
             <Stat {...stats.a} />
             <Stat {...stats.b} tone={!has(me, 'plan.all') ? 'azure' : undefined} />
             <Stat label={stats.c.label} value={stats.c.value} tone={stats.c.alert ? (!has(me, 'plan.all') ? 'danger' : 'azure') : undefined} />
-            <Stat label={stats.load.label} value={`${n(Math.round(pct))}٪`} sub={`${n(stats.load.used, 1)} از ${n(stats.load.cap)} نفر-ساعت`}>
+            <Stat label={stats.load.label} value={`${n(Math.round(pct))}%`} sub={`${n(stats.load.used, 1)} of ${n(stats.load.cap)} person-hours`}>
               <Bar value={pct} className="mt-1.5" tone={pct > 100 ? 'danger' : undefined} />
             </Stat>
           </div>
@@ -309,21 +312,21 @@ export function Home() {
       <TaskDashboard />
 
       <section>
-        <h2 className="mb-2 text-[15px] font-bold">کارها</h2>
-        <Tabs defaultValue="mine" dir="rtl">
+        <h2 className="mb-2 text-[15px] font-bold">Tasks</h2>
+        <Tabs value={tabs.value} onValueChange={tabs.onChange} dir="ltr">
           <div className="scroll-x thin-scroll -mx-1 px-1">
             <TabsList className="h-auto w-max justify-start gap-0.5">
-              <TabsTrigger value="mine" className="text-[13px]">کارهای من <span className="num ms-1.5 text-[11px] text-muted-foreground">{n(myTasks.length)}</span></TabsTrigger>
+              <TabsTrigger value="mine" className="text-[13px]">My Tasks <span className="num ms-1.5 text-[11px] text-muted-foreground">{n(myTasks.length)}</span></TabsTrigger>
               {teamOrder.map((tm) => (
                 <TabsTrigger key={tm.id} value={tm.id} className="text-[13px]">
-                  {tm.name}{tm.id === me.teamId && <span className="ms-1.5 h-1.5 w-1.5 rounded-full bg-azure" aria-label="تیم من" />}
+                  {tm.name}{tm.id === me.teamId && <span className="ms-1.5 h-1.5 w-1.5 rounded-full bg-azure" aria-label="My Team" />}
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
           <TabsContent value="mine" className="mt-4">
             {myTasks.length ? <TaskViews tasks={myTasks} idPrefix="home-mine" defaultView="list" hideTeam />
-              : <Empty icon={<Inbox className="h-6 w-6" />} title="تسکی به نام شما تخصیص داده نشده" hint={has(me, 'plan.all') ? 'همه‌ی نماها را می‌بینید. از تب تیم‌ها یا صفحه‌ی پروژه‌ها شروع کنید.' : 'کنترل پروژه تسک‌ها را به نفر یا تیم تخصیص می‌دهد. تسک‌های تیمتان در تب تیم دیده می‌شود.'} />}
+              : <Empty icon={<Inbox className="h-6 w-6" />} title="No tasks are assigned to you." hint={has(me, 'plan.all') ? 'Choose a team tab or open Projects to see more work.' : "Project control assigns tasks to the person or team. Your team’s tasks are seen in Team tab."} />}
           </TabsContent>
           {teamOrder.map((tm) => (
             <TabsContent key={tm.id} value={tm.id} className="mt-4">
@@ -339,7 +342,7 @@ export function Home() {
 function TeamTab({ teamId }: { teamId: string }) {
   const { workItems, teamOf, teamById } = useStore()
   const list = useMemo(() => workItems.filter((t) => teamOf(t) === teamId), [workItems, teamOf, teamId])
-  if (!list.length) return <Empty title={`تیم ${teamById[teamId]?.name} فعلاً تسکی ندارد`} hint={teamById[teamId]?.kind === 'other' ? 'این تیم به پروژه‌ها متصل نیست؛ تسک‌های دستی آن از صفحه‌ی پروژه ساخته می‌شود.' : 'تسک‌ها بعد از تخصیص توسط کنترل پروژه اینجا دیده می‌شوند.'} />
+  if (!list.length) return <Empty title={`Team ${teamById[teamId]?.name} currently has no tasks`} hint={teamById[teamId]?.kind === 'other' ? "This team is not connected to projects; its manual tasks are made of the project page." : "The task of assignment is seen here by the project control."} />
   return <TaskViews tasks={list} idPrefix={`home-${teamId}`} defaultView="kanban" hideTeam />
 }
 

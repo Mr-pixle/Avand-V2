@@ -1,3 +1,4 @@
+import { TeamName } from '@/components/ItemIcon'
 import {taskColorStyle,inkOn,teamCode} from '@/lib/brand'
 import { supervisionStatuses, supervisionStatus } from '@/lib/supervision'
 import { SupervisionWorkflowEditor } from './SupervisionWorkflow'
@@ -26,8 +27,8 @@ import type { Attachment, FlowState, Priority, Task, TaskType, User } from '@/li
 import { Empty, Initials, JalaliDateField, ProgressRing, Segmented } from './common'
 
 export const TYPE_FA: Record<TaskType, string> = {
-  design: 'طراحی', documentation: 'نقشه و مستندسازی', coordination: 'هماهنگی', modeling: 'مدل‌سازی BIM', render: 'رندر',
-  presentation: 'ارائه', research: 'پژوهش', supervision: 'نظارت', admin: 'اداری و کنترل', other: 'سایر',
+  design: "Design", documentation: "Map and layout", coordination: "Co-ordination", modeling: "BIM Modelling", render: "Render",
+  presentation: "Presentations", research: "Research", supervision: 'Supervision', admin: "Office and Control", other: "Other",
 }
 export const MAX_FILE_MB = 3
 
@@ -35,7 +36,7 @@ const FLOW_CLS: Record<FlowState, { pill: string; dot: string }> = {
   open: { pill: 'border-border bg-background/70 text-muted-foreground', dot: 'bg-muted-foreground/50' },
   assigned: { pill: 'border-azure/30 bg-background/70 text-foreground', dot: 'bg-azure/60' },
   in_progress: { pill: 'border-transparent bg-azure-soft text-azure-ink', dot: 'bg-azure' },
-  in_review: { pill: 'border-transparent bg-azure text-white', dot: 'bg-white' },
+  in_review: { pill: 'border-transparent bg-azure text-azure-foreground', dot: 'bg-azure-foreground' },
   rework: { pill: 'border-transparent bg-danger-soft text-destructive', dot: 'bg-destructive' },
   closed: { pill: 'border-transparent bg-leaf-soft text-leaf-ink', dot: 'bg-leaf' },
 }
@@ -54,14 +55,14 @@ export function DueText({ due, done, className }: { due?: string; done?: boolean
   const { d } = useFmt()
   if (!due) return <span className={cn('text-muted-foreground', className)}>—</span>
   const late = !done && due < TODAY
-  return <span className={cn('num', late && 'font-semibold text-destructive', className)} title={late ? 'گذشته از موعد' : undefined}>{d(due)}</span>
+  return <span className={cn('num', late && 'font-semibold text-destructive', className)} title={late ? 'Overdue' : undefined}>{d(due)}</span>
 }
 
 // ---------- files ----------
 export async function readFiles(list: FileList | File[] | null): Promise<NewFile[]> {
   const out: NewFile[] = []
   for (const f of Array.from(list ?? [])) {
-    if (f.size > MAX_FILE_MB * 1024 * 1024) { toast.error(`«${f.name}» بزرگ‌تر از ${MAX_FILE_MB} مگابایت است.`); continue }
+    if (f.size > MAX_FILE_MB * 1024 * 1024) { toast.error(`${f.name} is larger than ${MAX_FILE_MB} megabytes.`); continue }
     const dataUrl = await new Promise<string>((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = rej; r.readAsDataURL(f) })
     out.push({ name: f.name, mime: f.type || 'application/octet-stream', size: f.size, dataUrl })
   }
@@ -70,7 +71,7 @@ export async function readFiles(list: FileList | File[] | null): Promise<NewFile
 export function fmtSize(b: number) { return b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB` }
 
 /** Pick files and keep them until the form is submitted */
-export function FilePicker({ id, files, onChange, label = 'پیوست فایل' }: { id: string; files: NewFile[]; onChange: (f: NewFile[]) => void; label?: string }) {
+export function FilePicker({ id, files, onChange, label = "File attachment" }: { id: string; files: NewFile[]; onChange: (f: NewFile[]) => void; label?: string }) {
   const ref = useRef<HTMLInputElement>(null)
   const { digits } = useFmt()
   return (
@@ -80,10 +81,10 @@ export function FilePicker({ id, files, onChange, label = 'پیوست فایل' 
       {files.map((f, i) => (
         <span key={i} className="inline-flex max-w-[220px] items-center gap-1 rounded-full border bg-background/60 py-0.5 pe-1 ps-2 text-[11.5px]">
           <span className="truncate">{f.name}</span><span className="num shrink-0 text-muted-foreground">{digits(fmtSize(f.size))}</span>
-          <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`حذف ${f.name}`} onClick={() => onChange(files.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button>
+          <button type="button" className="rounded-full p-0.5 hover:bg-foreground/10" aria-label={`Deleted ${f.name}`} onClick={() => onChange(files.filter((_, j) => j !== i))}><X className="h-3 w-3" /></button>
         </span>
       ))}
-      {!files.length && <span className="text-[11.5px] text-muted-foreground">تا {digits(MAX_FILE_MB)} مگابایت برای هر فایل</span>}
+      {!files.length && <span className="text-[11.5px] text-muted-foreground">to {digits(MAX_FILE_MB)} Megabytes for each file</span>}
     </div>
   )
 }
@@ -101,9 +102,9 @@ export function AttachmentList({ items, empty }: { items: Attachment[]; empty?: 
             : <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg border bg-secondary"><FileText className="h-5 w-5 text-muted-foreground" /></span>}
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12.5px] font-medium" title={f.name}>{f.name}</div>
-            <div className="truncate text-[11px] text-muted-foreground">{userById[f.uploadedBy]?.name}، {time(f.uploadedAt)}، <span className="num">{digits(fmtSize(f.size))}</span></div>
+            <div className="truncate text-[11px] text-muted-foreground">{userById[f.uploadedBy]?.name}, {time(f.uploadedAt)}, <span className="num">{digits(fmtSize(f.size))}</span></div>
           </div>
-          <a href={f.dataUrl} download={f.name} className="key key-ghost inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full" aria-label={`دانلود ${f.name}`}><Download className="h-4 w-4" /></a>
+          <a href={f.dataUrl} download={f.name} className="key key-ghost inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full" aria-label={`Download ${f.name}`}><Download className="h-4 w-4" /></a>
         </li>
       ))}
     </ul>
@@ -111,7 +112,7 @@ export function AttachmentList({ items, empty }: { items: Attachment[]; empty?: 
 }
 
 // ---------- people ----------
-export function UserSelect({ id, value, onChange, users, placeholder = 'انتخاب کنید', noneLabel, disabled, grouped }: {
+export function UserSelect({ id, value, onChange, users, placeholder = 'Select an option', noneLabel, disabled, grouped }: {
   id: string; value?: string; onChange: (id?: string) => void; users: User[]; placeholder?: string; noneLabel?: string; disabled?: boolean; grouped?: boolean
 }) {
   const { teamById } = useStore()
@@ -128,7 +129,7 @@ export function UserSelect({ id, value, onChange, users, placeholder = 'انتخ
         {noneLabel && <SelectItem value="none">{noneLabel}</SelectItem>}
         {groups.map((g) => (
           <SelectGroup key={g.key}>
-            {g.label && <SelectLabel className="text-[11px] text-muted-foreground">{g.label}</SelectLabel>}
+            {g.label && <SelectLabel className="text-[11px] text-muted-foreground"><TeamName team={teamById[g.key]} /></SelectLabel>}
             {g.list.map((u) => <SelectItem key={u.id} value={u.id}><span className="inline-flex items-center gap-2"><Initials user={u} size={20} />{u.name}</span></SelectItem>)}
           </SelectGroup>
         ))}
@@ -154,15 +155,15 @@ function FlowCard({ t, showProject }: { t: Task; showProject?: boolean }) {
         <PriorityChip p={t.priority} className="mt-0.5" />
       </div>
       {showProject && t.kind === 'supervision' && <span className="truncate text-[11px] text-muted-foreground"><span className="mono text-[10.5px]">{projectById[t.projectId]?.code}</span> {projectById[t.projectId]?.name}</span>}
-      {showProject && t.kind === 'internal' && <span className="truncate text-[11px] text-muted-foreground">تیم {teamById[t.teamSpaceId ?? '']?.name}</span>}
+      {showProject && t.kind === 'internal' && <span className="truncate text-[11px] text-muted-foreground">Team <TeamName team={teamById[t.teamSpaceId ?? '']} /></span>}
       {t.location && <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{t.location}</span></span>}
       {ip && <span className="truncate text-[11px] text-muted-foreground">{ip.name}</span>}
       <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
-        {u ? <><Initials user={u} size={18} /><span className="truncate">{u.name}</span></> : <span>بدون {L('assignee')}</span>}
+        {u ? <><Initials user={u} size={18} /><span className="truncate">{u.name}</span></> : <span>No {L('assignee')}</span>}
       </div>
       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-        {rounds > 0 && <span className="num inline-flex items-center gap-0.5" title="دورهای بررسی"><MessageSquareReply className="h-3 w-3" />{n(rounds)}</span>}
-        {files > 0 && <span className="num inline-flex items-center gap-0.5" title="پیوست‌ها"><Paperclip className="h-3 w-3" />{n(files)}</span>}
+        {rounds > 0 && <span className="num inline-flex items-center gap-0.5" title="Review Courses"><MessageSquareReply className="h-3 w-3" />{n(rounds)}</span>}
+        {files > 0 && <span className="num inline-flex items-center gap-0.5" title="Attachments"><Paperclip className="h-3 w-3" />{n(files)}</span>}
         <DueText due={t.due} done={f === 'closed'} className="ms-auto" />
       </div>
     </button>
@@ -228,9 +229,9 @@ export function FlowList({ tasks, showProject, nested, estimation = true }: { ta
   const ids = new Set(tasks.map((t) => t.id))
   const roots = (nested ? tasks.filter((t) => !t.parentId || !ids.has(t.parentId)) : tasks).slice().sort(cmp)
   const kids = (id: string) => (nested ? tasks.filter((t) => t.parentId === id).sort(cmp) : [])
-  const where = (t: Task) => showProject && t.kind === 'supervision' ? projectById[t.projectId]?.code : showProject && t.kind === 'internal' ? `تیم ${teamById[t.teamSpaceId ?? '']?.name ?? ''}` : ''
+  const where = (t: Task) => showProject && t.kind === 'supervision' ? projectById[t.projectId]?.code : showProject && t.kind === 'internal' ? `Team ${teamById[t.teamSpaceId ?? '']?.name ?? ''}` : ''
   const row = (t: Task, depth: number): React.ReactNode[] => {
-    const sub = [where(t), t.location].filter(Boolean).join('، ')
+    const sub = [where(t), t.location].filter(Boolean).join(', ')
     const f = flowOf(t)
     return [
       <tr key={t.id} className="cursor-pointer border-b last:border-0 hover:bg-foreground/[0.035]" onClick={() => dispatch({ type: 'openTask', id: t.id })}>
@@ -278,13 +279,13 @@ export function FlowList({ tasks, showProject, nested, estimation = true }: { ta
 const ALLF = '__all'
 export type FlowFilter = { q: string; assignee: string; status: string; priority: string; due: string; team: string }
 const EMPTY_FILTER: FlowFilter = { q: '', assignee: ALLF, status: ALLF, priority: ALLF, due: ALLF, team: ALLF }
-function Pick({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+function Pick({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (v: string) => void; options: { value: string; label: ReactNode }[] }) {
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger id={id} aria-label={label} className={cn('h-8 w-auto min-w-[112px] max-w-[200px] gap-1 text-[12.5px]', value !== ALLF && 'border-azure/60 bg-azure-soft text-azure-ink')}>
         <span className="text-muted-foreground">{label}:</span><SelectValue />
       </SelectTrigger>
-      <SelectContent className="max-h-72"><SelectItem value={ALLF}>همه</SelectItem>{options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+      <SelectContent className="max-h-72"><SelectItem value={ALLF}>All</SelectItem>{options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
     </Select>
   )
 }
@@ -295,7 +296,7 @@ export function useFlowFilters(tasks: Task[], idPrefix: string, opts: { team?: b
   const [f, setF] = useState<FlowFilter>(EMPTY_FILTER)
   const set = (k: keyof FlowFilter) => (v: string) => setF((x) => ({ ...x, [k]: v }))
   const people = useMemo(() => [...new Set(tasks.map((t) => t.assigneeUserId).filter(Boolean) as string[])].map((id) => ({ value: id, label: userById[id]?.name ?? id })).sort((a, b) => a.label.localeCompare(b.label, 'fa')), [tasks, userById])
-  const teams = useMemo(() => [...new Set(tasks.map((t) => t.teamSpaceId).filter(Boolean) as string[])].map((id) => ({ value: id, label: teamById[id]?.name ?? id })), [tasks, teamById])
+  const teams = useMemo(() => [...new Set(tasks.map((t) => t.teamSpaceId).filter(Boolean) as string[])].map((id) => ({ value: id, label: <TeamName team={teamById[id]} label={teamById[id]?.name ?? id} /> })), [tasks, teamById])
   const filtered = useMemo(() => {
     const qq = f.q.trim().toLowerCase()
     const w0 = startOfWeek(TODAY)
@@ -318,14 +319,14 @@ export function useFlowFilters(tasks: Task[], idPrefix: string, opts: { team?: b
     <div className="flex flex-wrap items-center gap-1.5">
       <div className="relative">
         <Search className="pointer-events-none absolute start-2.5 top-2 h-4 w-4 text-muted-foreground" />
-        <Input id={`${idPrefix}-q`} value={f.q} onChange={(e) => set('q')(e.target.value)} placeholder="جستجو در عنوان و شرح" className="h-8 w-[200px] ps-8 text-[12.5px]" />
+        <Input id={`${idPrefix}-q`} value={f.q} onChange={(e) => set('q')(e.target.value)} placeholder="Search in title and description" className="h-8 w-[200px] ps-8 text-[12.5px]" />
       </div>
-      {opts.team && teams.length > 1 && <Pick id={`${idPrefix}-f-team`} label="تیم" value={f.team} onChange={set('team')} options={teams} />}
+      {opts.team && teams.length > 1 && <Pick id={`${idPrefix}-f-team`} label="Team" value={f.team} onChange={set('team')} options={teams} />}
       <Pick id={`${idPrefix}-f-priority`} label={L('priority')} value={f.priority} onChange={set('priority')} options={(['urgent', 'high', 'normal', 'low', 'none'] as Priority[]).map((p) => ({ value: p, label: PRIORITY_FA[p] }))} />
-      <Pick id={`${idPrefix}-f-assignee`} label={L('assignee')} value={f.assignee} onChange={set('assignee')} options={[...people, { value: 'none', label: `بدون ${L('assignee')}` }]} />
-      <Pick id={`${idPrefix}-f-due`} label={L('due')} value={f.due} onChange={set('due')} options={[{ value: 'overdue', label: 'گذشته از موعد' }, { value: 'week', label: 'این هفته' }, { value: 'next2', label: 'دو هفته‌ی آینده' }, { value: 'none', label: `بدون ${L('due')}` }]} />
-      <Pick id={`${idPrefix}-f-status`} label={L('status')} value={f.status} onChange={set('status')} options={[{ value: 'open_all', label: 'همه‌ی باز' }, ...(sup?supervisionStatuses(state).map(x=>({value:x.id,label:x.name})):FLOW_ORDER.map((x) => ({ value: x, label: FLOW_FA[x] })))]} />
-      {active > 0 && <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setF(EMPTY_FILTER)}><X className="h-3.5 w-3.5" /> پاک کردن فیلترها</button>}
+      <Pick id={`${idPrefix}-f-assignee`} label={L('assignee')} value={f.assignee} onChange={set('assignee')} options={[...people, { value: 'none', label: `No ${L('assignee')}` }]} />
+      <Pick id={`${idPrefix}-f-due`} label={L('due')} value={f.due} onChange={set('due')} options={[{ value: 'overdue', label: 'Overdue' }, { value: 'week', label: "This week" }, { value: 'next2', label: "The next two weeks" }, { value: 'none', label: `No ${L('due')}` }]} />
+      <Pick id={`${idPrefix}-f-status`} label={L('status')} value={f.status} onChange={set('status')} options={[{ value: 'open_all', label: "All Open" }, ...(sup?supervisionStatuses(state).map(x=>({value:x.id,label:x.name})):FLOW_ORDER.map((x) => ({ value: x, label: FLOW_FA[x] })))]} />
+      {active > 0 && <button type="button" className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setF(EMPTY_FILTER)}><X className="h-3.5 w-3.5" /> Clear Filters</button>}
     </div>
   )
   return { filtered, bar, active, filter: f, setFilter: setF }
@@ -357,11 +358,11 @@ export function CreateFlowTaskDialog({ kind, open, onOpenChange, projectId, team
   const reset = () => { setF((x) => ({ ...x, name: '', description: '', location: '', assignee: undefined, reviewer: defaultReviewer, est: '', start: undefined, due: undefined })); setFiles([]) }
   const pickAssignee = (v?: string) => setF((x) => ({ ...x, assignee: v, reviewer: fin && v && v === x.reviewer ? undefined : fin && !v ? defaultReviewer : x.reviewer }))
   const submit = () => {
-    if (!f.name.trim()) { toast.error('عنوان را وارد کنید.'); return }
-    if (sup && !proj) { toast.error('پروژه را انتخاب کنید.'); return }
-    if (sup && !f.due) { toast.error('برای مورد نظارتی Due Date لازم است.'); return }
-    if (f.assignee && f.assignee === f.reviewer) { toast.error('مسئول و Reviewer نمی‌توانند یک نفر باشند.'); return }
-    if (f.start && f.due && f.due < f.start) { toast.error('Due Date نمی‌تواند قبل از Start باشد.'); return }
+    if (!f.name.trim()) { toast.error("Enter the title."); return }
+    if (sup && !proj) { toast.error("Choose the project."); return }
+    if (sup && !f.due) { toast.error("Due date monitoring is required."); return }
+    if (f.assignee && f.assignee === f.reviewer) { toast.error("The author and reviewer cannot be one person."); return }
+    if (f.start && f.due && f.due < f.start) { toast.error("Due date cannot be before the start."); return }
     const id = `${sup ? 'SUP' : fin ? 'FA' : 'IN'}-${Date.now().toString(36).toUpperCase()}`
     const task: Task = {
       id, kind, name: f.name.trim(), source: 'manual', order: Date.now() / 1e6, parentId: parentId ?? null,
@@ -371,17 +372,17 @@ export function CreateFlowTaskDialog({ kind, open, onOpenChange, projectId, team
     }
     dispatch({ type: 'createFlowTask', task, files })
     onOpenChange(false); reset()
-    toast.success(sup ? 'مورد نظارتی ثبت شد' : fin ? `Task در ${FIN_SPACE_FA[finSpace]} ثبت شد` : 'تسک تیم ساخته شد', { description: f.assignee ? `${L('assignee')} اعلان گرفت.` : 'بعداً از صفحه‌ی تسک ارجاع دهید.' })
+    toast.success(sup ? "Site supervision task created" : fin ? `Task was recorded in ${FIN_SPACE_FA[finSpace]}` : "Team task created", { description: f.assignee ? `${L('assignee')} was notified.` : "Open the task to continue." })
   }
   const pre = sup ? 'sup' : fin ? 'fa' : 'in'
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent dir="ltr" className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader className="pe-8 text-start">
-          <DialogTitle>{sup ? 'ثبت مورد نظارتی' : fin ? `Task تازه — ${FIN_SPACE_FA[finSpace]}` : parent ? `زیرتسک «${parent.name}»` : `تسک تازه‌ی تیم ${teamById[teamId ?? '']?.name ?? ''}`}</DialogTitle>
-          <DialogDescription>{sup ? 'مورد را با محل، عکس و موعد ثبت و به کارشناس ارجاع دهید. بعد از ارسال کار، شما (Reviewer) تأیید یا برای اصلاح برمی‌گردانید.'
-            : fin ? `فقط ${finSpace === 'finance' ? 'مدیرعامل و مدیر مالی' : 'مدیرعامل و مدیر اداری'} این Task را می‌بینند. Reviewer پیش‌فرض مدیرعامل است.`
-              : outsider ? `این تسک در فضای تیم ${teamById[teamId ?? '']?.name} ثبت می‌شود و به همین تیم تعلق دارد؛ مسئول و Reviewer از اعضای همین تیم انتخاب می‌شوند.` : 'تسک داخلی تیم؛ در Progress و گزارش پروژه‌ها حساب نمی‌شود.'}</DialogDescription>
+          <DialogTitle>{sup ? "Monitor case registration" : fin ? `New Task — ${FIN_SPACE_FA[finSpace]}` : parent ? `Zirtsk ${parent.name}` : `New Team Task ${teamById[teamId ?? '']?.name ?? ''}`}</DialogTitle>
+          <DialogDescription>{sup ? "Record the item with location, photo and deadline and refer it to the expert. After sending the job, you (Reviewer) will confirm or return for correction."
+            : fin ? `Only ${finSpace === 'finance' ? "Managing Director and Financial Manager" : "Director and Administrative Manager"} see this task.`
+              : outsider ? `This task is recorded in the team space ${teamById[teamId ?? '']?.name} and belongs to the same team; responsible and reviewer are selected from members of this team.` : "The internal task of the team is not included in the progress and report of the projects."}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/* A — identity and classification */}
@@ -389,20 +390,20 @@ export function CreateFlowTaskDialog({ kind, open, onOpenChange, projectId, team
             <div className="sm:col-span-2">
               <Label htmlFor={`${pre}-project`} className="eyebrow">{L('project')}</Label>
               <Select value={f.project ?? ''} onValueChange={(v) => setF({ ...f, project: v, assignee: undefined })}>
-                <SelectTrigger id={`${pre}-project`} className="mt-1 h-9"><SelectValue placeholder="انتخاب پروژه" /></SelectTrigger>
+                <SelectTrigger id={`${pre}-project`} className="mt-1 h-9"><SelectValue placeholder="Select project" /></SelectTrigger>
                 <SelectContent>{projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.code} — {p.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}
-          <div className="sm:col-span-2"><Label htmlFor={`${pre}-name`} className="eyebrow">{L('name')}</Label><Input id={`${pre}-name`} className="mt-1" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={sup ? 'مثلاً: ترک دیوار لابی همکف' : fin ? (finSpace === 'finance' ? 'مثلاً: تسویه‌ی فاکتور مشاور' : 'مثلاً: تمدید قرارداد بیمه‌ی دفتر') : 'مثلاً: به‌روزرسانی قالب شیت‌ها'} /></div>
+          <div className="sm:col-span-2"><Label htmlFor={`${pre}-name`} className="eyebrow">{L('name')}</Label><Input id={`${pre}-name`} className="mt-1" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder={sup ? "For example: leaving the wall of the ground lobby" : fin ? (finSpace === 'finance' ? "For example, a consultant’s invoice" : "For example, an extension of the office insurance contract") : "For example: update the sheets format"} /></div>
           <div className="sm:col-span-2"><Label htmlFor={`${pre}-desc`} className="eyebrow">{L('description')}</Label><Textarea id={`${pre}-desc`} className="mt-1 min-h-[72px]" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
-          {sup && <div className="sm:col-span-2"><Label htmlFor={`${pre}-loc`} className="eyebrow">{L('location')}</Label><Input id={`${pre}-loc`} className="mt-1" value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} placeholder="طبقه، محور، فضا" /></div>}
+          {sup && <div className="sm:col-span-2"><Label htmlFor={`${pre}-loc`} className="eyebrow">{L('location')}</Label><Input id={`${pre}-loc`} className="mt-1" value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} placeholder="Floor, Axis, Space" /></div>}
           {kind === 'internal' && !parent && (
             <div>
               <Label htmlFor={`${pre}-ip`} className="eyebrow">{L('internalProjectId')}</Label>
               <Select value={f.ip} onValueChange={(v) => setF({ ...f, ip: v })}>
                 <SelectTrigger id={`${pre}-ip`} className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="none">بدون پروژه‌ی داخلی</SelectItem>{state.internalProjects.filter((p) => p.teamId === teamId).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="none">Without an internal project</SelectItem>{state.internalProjects.filter((p) => p.teamId === teamId).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
           )}
@@ -423,17 +424,17 @@ export function CreateFlowTaskDialog({ kind, open, onOpenChange, projectId, team
             </Select>
           </div>
           {/* B — people */}
-          <div className={cn(kind !== 'internal' && 'sm:col-start-1')}><Label htmlFor={`${pre}-assignee`} className="eyebrow">{L('assignee')}</Label><UserSelect id={`${pre}-assignee`} value={f.assignee} onChange={pickAssignee} users={executors} noneLabel="بعداً ارجاع می‌دهم" grouped={sup} disabled={sup && !proj} /></div>
-          <div><Label htmlFor={`${pre}-reviewer`} className="eyebrow">{L('reviewer')}</Label><UserSelect id={`${pre}-reviewer`} value={f.reviewer} onChange={(v) => setF({ ...f, reviewer: v })} users={reviewers.filter((u) => u.id !== f.assignee)} noneLabel={sup ? undefined : `بدون بررسی (${L('assignee')} می‌بندد)`} /></div>
+          <div className={cn(kind !== 'internal' && 'sm:col-start-1')}><Label htmlFor={`${pre}-assignee`} className="eyebrow">{L('assignee')}</Label><UserSelect id={`${pre}-assignee`} value={f.assignee} onChange={pickAssignee} users={executors} noneLabel="I'll go back later" grouped={sup} disabled={sup && !proj} /></div>
+          <div><Label htmlFor={`${pre}-reviewer`} className="eyebrow">{L('reviewer')}</Label><UserSelect id={`${pre}-reviewer`} value={f.reviewer} onChange={(v) => setF({ ...f, reviewer: v })} users={reviewers.filter((u) => u.id !== f.assignee)} noneLabel={sup ? undefined : `No review required (${L('assignee')} closes the task)`} /></div>
           {/* C — schedule and effort */}
           {!fin && <div><Label htmlFor={`${pre}-est`} className="eyebrow">{LU('estimation')}</Label><Input id={`${pre}-est`} type="number" min={0} step={0.5} inputMode="decimal" className="num mt-1 h-9" value={f.est} onChange={(e) => setF({ ...f, est: e.target.value })} /></div>}
           <div className={cn(fin && 'sm:col-start-1')}><Label htmlFor={`${pre}-start`} className="eyebrow">{L('start')}</Label><div className="mt-1"><JalaliDateField id={`${pre}-start`} value={f.start} onChange={(v) => setF({ ...f, start: v })} /></div></div>
           <div><Label htmlFor={`${pre}-due`} className="eyebrow">{L('due')}</Label><div className="mt-1"><JalaliDateField id={`${pre}-due`} value={f.due} onChange={(v) => setF({ ...f, due: v })} /></div></div>
-          <div className="sm:col-span-2"><Label htmlFor={`${pre}-files`} className="eyebrow">پیوست ({fin ? 'قرارداد، فاکتور، PDF' : 'عکس، نقشه، PDF'})</Label><div className="mt-1"><FilePicker id={`${pre}-files`} files={files} onChange={setFiles} /></div></div>
+          <div className="sm:col-span-2"><Label htmlFor={`${pre}-files`} className="eyebrow">â€“{fin ? "Contract, Factor, PDF" : "Photo, Map, PDF"})</Label><div className="mt-1"><FilePicker id={`${pre}-files`} files={files} onChange={setFiles} /></div></div>
         </div>
         <DialogFooter className="gap-2 sm:justify-start">
-          <Button onClick={submit}>{sup ? 'ثبت و ارجاع' : fin ? 'ثبت Task' : 'ساخت تسک'}</Button>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>انصراف</Button>
+          <Button onClick={submit}>{sup ? "Create and Assign" : fin ? "Create Task" : "Create Task"}</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -454,19 +455,19 @@ export function SupervisionPanel({ projectId, showProject }: { projectId?: strin
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-          <span className="rounded-full border bg-background/60 px-2 py-0.5">باز <b className="num">{n(tasks.length - count('closed'))}</b></span>
-          <span className="rounded-full bg-azure px-2 py-0.5 text-white">در انتظار بررسی <b className="num">{n(count('in_review'))}</b></span>
-          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-destructive">برگشتی <b className="num">{n(count('rework'))}</b></span>
-          {late > 0 && <span className="rounded-full bg-destructive px-2 py-0.5 text-white">گذشته از موعد <b className="num">{n(late)}</b></span>}
-          <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-leaf-ink">بسته‌شده <b className="num">{n(count('closed'))}</b></span>
+          <span className="rounded-full border bg-background/60 px-2 py-0.5">Open <b className="num">{n(tasks.length - count('closed'))}</b></span>
+          <span className="rounded-full bg-azure px-2 py-0.5 text-azure-foreground">In Review <b className="num">{n(count('in_review'))}</b></span>
+          <span className="rounded-full bg-danger-soft px-2 py-0.5 text-destructive">Come back <b className="num">{n(count('rework'))}</b></span>
+          {late > 0 && <span className="rounded-full bg-destructive px-2 py-0.5 text-destructive-foreground">Overdue <b className="num">{n(late)}</b></span>}
+          <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-leaf-ink">Closed <b className="num">{n(count('closed'))}</b></span>
         </div>
         <div className="order-first me-auto flex flex-wrap items-center gap-2">
-          <Segmented size="sm" value={view} onChange={setView} options={[{value:'board',label:'Kanban',icon:<LayoutGrid className="h-3.5 w-3.5"/>},{value:'list',label:'لیست',icon:<List className="h-3.5 w-3.5"/>},{value:'tree',label:'درختی'},{value:'calendar',label:'تقویم'}]} />
-          <SupervisionWorkflowEditor />{can.perm('supervision.create') && <Button size="sm" onClick={() => setOpen(true)}><Plus className="h-3.5 w-3.5" /> ثبت مورد نظارتی</Button>}
+          <Segmented size="sm" value={view} onChange={setView} options={[{value:'board',label:'Kanban',icon:<LayoutGrid className="h-3.5 w-3.5"/>},{value:'list',label:"List",icon:<List className="h-3.5 w-3.5"/>},{value:'tree',label:"Tree"},{value:'calendar',label:'Calendar'}]} />
+          <SupervisionWorkflowEditor />{can.perm('supervision.create') && <Button size="sm" onClick={() => setOpen(true)}><Plus className="h-3.5 w-3.5" /> Monitor case registration</Button>}
         </div>
       </div>
       {bar}
-        {tasks.length === 0 ? <Empty icon={<ClipboardCheck className="h-6 w-6" />} title="مورد نظارتی ثبت نشده" hint="ناظران تیم نظارت و اجرا موارد کارگاهی را با عکس و محل ثبت و به کارشناس ارجاع می‌دهند." />
+        {tasks.length === 0 ? <Empty icon={<ClipboardCheck className="h-6 w-6" />} title="No site supervision tasks" hint="Supervisors of the monitoring and execution team will submit workshop items with photos and location and refer to the expert." />
         : view === 'calendar' ? <DateBoard items={filtered} dateOf={t=>t.due??t.start??''} render={t=><button key={t.id} className="rounded-md border bg-background p-2 text-start text-xs" onClick={()=>dispatch({type:'openTask',id:t.id})}>{t.name} <PriorityChip p={t.priority}/></button>}/> : view === 'tree' ? <div className="grid gap-3">{state.projects.map(p=>{const list=filtered.filter(t=>t.projectId===p.id);return list.length?<details open key={p.id} className="glass-card p-3"><summary className="cursor-pointer font-semibold">{p.name}</summary><FlowList tasks={list} /></details>:null})}</div> : view === 'board' ? <FlowBoard tasks={filtered} showProject={showProject} supervision /> : <FlowList tasks={filtered} showProject={showProject} />}
       <CreateFlowTaskDialog kind="supervision" open={open} onOpenChange={setOpen} projectId={projectId} />
     </div>
@@ -480,7 +481,7 @@ export function MyFlowWork() {
   const todo = Object.values(state.tasks).filter((t) => (t.kind === 'supervision' || t.kind === 'internal' || t.kind === 'finadmin') && can.viewTask(t) && t.assigneeUserId === me.id && flowOf(t) !== 'closed' && flowOf(t) !== 'in_review')
   const review = Object.values(state.tasks).filter((t) => t.flow === 'in_review' && t.reviewerId === me.id && can.viewTask(t))
   if (!todo.length && !review.length) return null
-  const where = (t: Task) => t.kind === 'supervision' ? `نظارت، ${projectById[t.projectId]?.code}` : t.kind === 'internal' ? `فضای تیم ${teamById[t.teamSpaceId ?? '']?.name}` : t.kind === 'finadmin' ? FIN_SPACE_FA[finSpaceOf(t) ?? 'finance'] : projectById[t.projectId]?.code
+  const where = (t: Task) => t.kind === 'supervision' ? `Monitoring, ${projectById[t.projectId]?.code}` : t.kind === 'internal' ? `Team Space ${teamById[t.teamSpaceId ?? '']?.name}` : t.kind === 'finadmin' ? FIN_SPACE_FA[finSpaceOf(t) ?? 'finance'] : projectById[t.projectId]?.code
   const Row = ({ t }: { t: Task }) => (
     <li>
       <button className="flex w-full items-center gap-2 px-3 py-2 text-start text-[13px] hover:bg-foreground/[0.035]" onClick={() => dispatch({ type: 'openTask', id: t.id })}>
@@ -493,11 +494,11 @@ export function MyFlowWork() {
   )
   return (
     <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {[{ title: 'نظارت، کارهای تیم و مالی-اداری، منتظر اقدام من', list: todo, icon: <Rows3 className="h-4 w-4 text-azure" /> }, { title: 'منتظر بررسی من', list: review, icon: <ClipboardCheck className="h-4 w-4 text-azure" /> }].map((b) => (
+      {[{ title: "Monitoring, team work and financial-administrative, waiting for my action", list: todo, icon: <Rows3 className="h-4 w-4 text-azure" /> }, { title: "Waiting for my review", list: review, icon: <ClipboardCheck className="h-4 w-4 text-azure" /> }].map((b) => (
         <div key={b.title} className="overflow-hidden glass-card">
           <header className="flex items-center gap-2 border-b px-4 py-2.5 font-semibold">{b.icon}{b.title}<span className="num ms-auto text-[12px] font-normal text-muted-foreground">{n(b.list.length)}</span></header>
           {b.list.length ? <ul className="divide-y">{b.list.map((t) => <Row key={t.id} t={t} />)}</ul>
-            : <div className="flex items-center gap-2 px-4 py-5 text-[12.5px] text-muted-foreground"><Inbox className="h-4 w-4" /> موردی نیست.</div>}
+            : <div className="flex items-center gap-2 px-4 py-5 text-[12.5px] text-muted-foreground"><Inbox className="h-4 w-4" /> It's nothing.</div>}
         </div>
       ))}
     </section>

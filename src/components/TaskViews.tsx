@@ -1,5 +1,7 @@
+import { statusLabel } from '@/lib/displayLabels'
+import { TeamName } from '@/components/ItemIcon'
 import {projectProgress} from '@/lib/projectProgress'
-import {taskColorStyle,phaseTitle,teamCode,teamStatusStyle} from '@/lib/brand'
+import {taskColorStyle,phaseTitle,teamCode,teamOutline} from '@/lib/brand'
 import {ColumnPicker,TaskColumn,useTaskColumns,LIST_COLUMNS,TREE_COLUMNS} from './TaskColumns'
 import type {FieldKey} from '@/lib/taskFields'
 import { PriorityChip } from './Priority'
@@ -11,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { effectiveScope, isWorkItem, statusOf, useFmt, useStore } from '@/lib/store'
+import { navigationSelection } from '@/lib/navigation'
 import type { Task } from '@/lib/types'
 import { TODAY } from '@/lib/seed'
 import { J_MONTHS, WEEKDAYS, WEEKDAYS_SHORT, addDays, addJMonths, fromJalali, isWeekend, jMonthLength, startOfJMonth, startOfWeek, toJalali, weekdayIndex } from '@/lib/jalali'
@@ -22,8 +25,9 @@ import type { GanttInput } from '@/lib/gantt'
 export type ViewKind = 'kanban' | 'list' | 'tree' | 'calendar' | 'gantt'
 
 const ALL = '__all'
+const taskViews: readonly ViewKind[] = ['tree', 'kanban', 'calendar', 'gantt']
 
-function FilterSelect({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+function FilterSelect({ id, label, value, onChange, options }: { id: string; label: string; value: string; onChange: (v: string) => void; options: { value: string; label: ReactNode }[] }) {
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger id={id} aria-label={label} className={cn('h-8 w-auto min-w-[112px] max-w-[190px] gap-1 text-[12.5px]', value !== ALL && 'border-azure/60 bg-azure-soft text-azure-ink')}>
@@ -31,7 +35,7 @@ function FilterSelect({ id, label, value, onChange, options }: { id: string; lab
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="max-h-72">
-        <SelectItem value={ALL}>همه</SelectItem>
+        <SelectItem value={ALL}>All</SelectItem>
         {options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
       </SelectContent>
     </Select>
@@ -44,9 +48,9 @@ export function TaskViews({ tasks, structuralTasks = [], colorTeamId, idPrefix, 
   ganttExtras?: GanttInput['extras']
 }) {
   const store = useStore()
-  const { state, userById, teamById, projectById, teamOf } = store
+  const { state, dispatch, userById, teamById, projectById, teamOf } = store
   const fmt = useFmt()
-  const [view, setView] = useState<ViewKind>(defaultView === 'list' ? 'tree' : defaultView)
+  const { value: view, onChange: setView } = navigationSelection(state.nav, dispatch, 'taskView', defaultView === 'list' ? 'tree' : defaultView, taskViews)
   const {columns,setColumns,defaults}=useTaskColumns(idPrefix,view)
   const [q, setQ] = useState('')
   const [f, setF] = useState({ assignee: ALL, due: ALL, status: ALL, project: ALL, team: ALL, pkg: ALL, floor: ALL, priority: ALL })
@@ -60,9 +64,9 @@ export function TaskViews({ tasks, structuralTasks = [], colorTeamId, idPrefix, 
     const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter(Boolean) as string[])]
     return {
       assignee: uniq(tasks.map((t) => t.assigneeUserId)).map((id) => ({ value: id, label: userById[id]?.name ?? id })).sort((a, b) => a.label.localeCompare(b.label, 'fa')),
-      status: uniq(tasks.map((t) => statusOf(state, t)?.name)).map((n) => ({ value: n, label: n })),
+      status: uniq(tasks.map((t) => statusOf(state, t)?.name)).map((n) => ({ value: n, label: statusLabel(n) })),
       project: uniq(tasks.map((t) => t.projectId)).map((id) => ({ value: id, label: projectById[id]?.name ?? id })),
-      team: uniq(tasks.map((t) => teamOf(t) ?? undefined)).map((id) => ({ value: id, label: teamById[id]?.name ?? id })),
+      team: uniq(tasks.map((t) => teamOf(t) ?? undefined)).map((id) => ({ value: id, label: <TeamName team={teamById[id]} label={teamById[id]?.name ?? id} /> })),
       pkg: uniq(tasks.map((t) => pkgOf(t))).sort().map((p) => ({ value: p, label: p })),
       floor: uniq(tasks.map((t) => floorOf(t))).map((x) => ({ value: x, label: x })),
     }
@@ -104,13 +108,13 @@ export function TaskViews({ tasks, structuralTasks = [], colorTeamId, idPrefix, 
         <div className="flex items-center gap-2">
           {(view==='list'||view==='tree')&&<ColumnPicker columns={columns} onChange={setColumns} defaults={defaults} hideProject={hideProject}/>}
           {extraToolbar}
-          <span className="num text-xs text-muted-foreground">{fmt.n(filtered.length)} تسک</span>
+          <span className="num text-xs text-muted-foreground">{fmt.n(filtered.length)} Task</span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="relative">
           <Search className="pointer-events-none absolute start-2.5 top-2 h-4 w-4 text-muted-foreground" />
-          <Input id={`${idPrefix}-q`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در نام یا شماره‌ی سند" className="h-8 w-[210px] ps-8 text-[12.5px]" />
+          <Input id={`${idPrefix}-q`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or document number" className="h-8 w-[210px] ps-8 text-[12.5px]" />
         </div>
         {/* same order as the field groups of the task page: A identity → B people → C schedule → D status */}
         {!hideProject && opts.project.length > 1 && <FilterSelect id={`${idPrefix}-f-project`} label={L('project')} value={f.project} onChange={set('project')} options={opts.project} />}
@@ -119,21 +123,21 @@ export function TaskViews({ tasks, structuralTasks = [], colorTeamId, idPrefix, 
         <FilterSelect id={`${idPrefix}-f-assignee`} label={L('assignee')} value={f.assignee} onChange={set('assignee')} options={opts.assignee} />
         {!hideTeam && opts.team.length > 1 && <FilterSelect id={`${idPrefix}-f-team`} label={L('team')} value={f.team} onChange={set('team')} options={opts.team} />}
         <FilterSelect id={`${idPrefix}-f-due`} label={L('due')} value={f.due} onChange={set('due')} options={[
-          { value: 'overdue', label: 'گذشته از موعد' }, { value: 'week', label: 'این هفته' }, { value: 'next2', label: 'دو هفته‌ی آینده' }, { value: 'none', label: `بدون ${L('due')}` }, { value: 'unassigned', label: 'بدون تخصیص' },
+          { value: 'overdue', label: 'Overdue' }, { value: 'week', label: "This week" }, { value: 'next2', label: "The next two weeks" }, { value: 'none', label: `No ${L('due')}` }, { value: 'unassigned', label: "No allocation" },
         ]} />
-        <FilterSelect id={`${idPrefix}-f-priority`} label="اولویت" value={f.priority} onChange={set('priority')} options={Object.entries(PRIORITY_FA).map(([value,label]) => ({value,label}))} />
+        <FilterSelect id={`${idPrefix}-f-priority`} label="Priority" value={f.priority} onChange={set('priority')} options={Object.entries(PRIORITY_FA).map(([value,label]) => ({value,label}))} />
         <FilterSelect id={`${idPrefix}-f-status`} label={L('status')} value={f.status} onChange={set('status')} options={opts.status} />
         {active > 0 && (
           <button className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={() => { setQ(''); setF({ assignee: ALL, due: ALL, status: ALL, project: ALL, team: ALL, pkg: ALL, floor: ALL, priority: ALL }) }}>
-            <X className="h-3.5 w-3.5" /> پاک کردن فیلترها
+            <X className="h-3.5 w-3.5" /> Clear Filters
           </button>
         )}
       </div>
       {filtered.length === 0 && !(view === 'gantt' && ganttExtras?.tasks.length) ? (
         tasks.length === 0
-          ? <Empty title="هنوز تسکی اینجا نیست" hint="تسک‌های پروژه با Sync از MDR همان پروژه (پس از تأیید در صف Sync Review) یا به‌صورت تسک دستی وارد می‌شوند." />
-          : <Empty title="تسکی با این فیلترها پیدا نشد" hint="فیلترها را کم کنید یا تب دیگری را باز کنید." />
+          ? <Empty title="She's not here yet" hint="Project Tasks are entered with Sync from the MDR of the same project (after confirmation in Sync Review queue) or as manual Tasks." />
+          : <Empty title="I couldn't find it with these filters" hint="Reduce the filters or open another tab." />
       ) : view === 'gantt' ? <GanttView tasks={filtered} extras={ganttExtras && { ...ganttExtras, tasks: ganttExtras.tasks.filter((t) => (f.priority === ALL || (t.priority ?? 'none') === f.priority) && (!q.trim() || t.name.toLowerCase().includes(q.trim().toLowerCase()))) }} />
         : view === 'list' ? <ListView tasks={filtered} hideProject={hideProject} columns={columns} />
         : view === 'kanban' ? <KanbanView tasks={filtered} colorTeamId={colorTeamId} />
@@ -179,7 +183,7 @@ export function ListView({ tasks, hideProject, columns=LIST_COLUMNS }: { tasks: 
         <thead className="border-b bg-foreground/[0.03]">
           {/* columns follow the field groups: A identity → B people → C schedule → D status */}
           <tr>
-            <Th k="name">سند / تسک</Th>{columns.filter(k=>!hideProject||k!=='project').map(k=><Th key={k} k={({priority:'priority',estimation:'est',due:'due',status:'status'} as Partial<Record<FieldKey,SortKey>>)[k]}>{L(k)}</Th>)}
+            <Th k="name">Document / Task</Th>{columns.filter(k=>!hideProject||k!=='project').map(k=><Th key={k} k={({priority:'priority',estimation:'est',due:'due',status:'status'} as Partial<Record<FieldKey,SortKey>>)[k]}>{L(k)}</Th>)}
           </tr>
         </thead>
         <tbody>
@@ -193,7 +197,7 @@ export function ListView({ tasks, hideProject, columns=LIST_COLUMNS }: { tasks: 
                     <div className="min-w-0">
                       <div className="truncate font-medium">{t.name}</div>
                       <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-                        {t.docNumber ? <span className="mono">{t.docNumber}</span> : <span>دستی</span>}
+                          {t.docNumber ? <span className="mono">{t.docNumber}</span> : <span>Hand-held</span>}
                         {t.removedFromMdr && <span className="rounded bg-danger-soft px-1 text-destructive">Removed from MDR</span>}
                       </div>
                     </div>
@@ -207,7 +211,7 @@ export function ListView({ tasks, hideProject, columns=LIST_COLUMNS }: { tasks: 
       </table>
       {rows.length > limit && (
         <div className="border-t p-2 text-center">
-          <Button variant="ghost" size="sm" onClick={() => setLimit((l) => l + 200)}>نمایش {n(Math.min(200, rows.length - limit))} ردیف دیگر</Button>
+          <Button variant="ghost" size="sm" onClick={() => setLimit((l) => l + 200)}>Show {n(Math.min(200, rows.length - limit))} Other Rows</Button>
         </div>
       )}
     </div>
@@ -216,9 +220,9 @@ export function ListView({ tasks, hideProject, columns=LIST_COLUMNS }: { tasks: 
 
 // ---------------- Kanban ----------------
 function scopeLabel(store: ReturnType<typeof useStore>, scope: string) {
-  if (scope === 'office') return 'پیش‌فرض دفتر'
+  if (scope === 'office') return "Default Office"
   const p = store.projectById[scope]
-  if (p) return `${p.name} (سطح پروژه)`
+  if (p) return `${p.name} (Project Level)`
   const t = store.state.tasks[scope]
   return t ? `${store.projectById[t.projectId]?.name} › ${t.name}` : scope
 }
@@ -251,10 +255,10 @@ export function KanbanView({ tasks, colorTeamId }: { tasks: Task[]; colorTeamId?
           <Select value={scope} onValueChange={setScopeSel}>
             <SelectTrigger id="kanban-scope" className="h-8 w-auto min-w-[200px] text-[12.5px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {groups.map(([k, l]) => <SelectItem key={k} value={k}>{scopeLabel(store, k)} — {n(l.length)} تسک</SelectItem>)}
+              {groups.map(([k, l]) => <SelectItem key={k} value={k}>{scopeLabel(store, k)} — {n(l.length)} Task</SelectItem>)}
             </SelectContent>
           </Select>
-          {hidden > 0 && <span className="text-muted-foreground">{n(hidden)} تسک با Status Set دیگر در این تخته نیستند.</span>}
+          {hidden > 0 && <span className="text-muted-foreground">{n(hidden)} No longer on this board with Status Set.</span>}
         </div>
       )}
       <div className="scroll-x thin-scroll -mx-1 px-1 pb-2">
@@ -272,8 +276,8 @@ export function KanbanView({ tasks, colorTeamId }: { tasks: Task[]; colorTeamId?
                   if (t && can.editStatus(t)) dispatch({ type: 'setStatus', taskId: id, statusId: s.id })
                 }}
                 className={cn('glass-well flex w-[248px] shrink-0 flex-col transition-[background-color,box-shadow] duration-150', over === s.id && 'border-azure bg-azure-soft')}>
-                <div className="flex items-center justify-between rounded-t-xl border-b px-3 py-2" style={headerTeam?teamStatusStyle(headerTeam,s.progress):undefined}><StatusPill status={s} team={headerTeam} />
-                  <span className="num flex items-center gap-2 text-xs"><span className="font-semibold">{n(col.length)}</span><span>{n(s.progress)}٪</span></span>
+                <div className="flex items-center justify-between rounded-t-xl border-b px-3 py-2" style={headerTeam?teamOutline(headerTeam):undefined}><StatusPill status={s} team={headerTeam} />
+                  <span className="num flex items-center gap-2 text-xs"><span className="font-semibold">{n(col.length)}</span><span>{n(s.progress)}%</span></span>
                 </div>
                 <div className="flex max-h-[560px] min-h-[120px] flex-col gap-2 overflow-y-auto p-2 thin-scroll">
                   {col.slice(0, 60).map((t) => {
@@ -286,10 +290,11 @@ export function KanbanView({ tasks, colorTeamId }: { tasks: Task[]; colorTeamId?
                         className={cn('glass-item is-interactive group cursor-pointer p-3 text-[12.5px] hover:border-foreground/30', editable && 'active:cursor-grabbing')}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 font-medium leading-snug">{t.name}</div><PriorityChip p={t.priority} />
-                          {editable ? <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground" /> : <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-label="فقط مسئول یا تیم مسئول می‌تواند Status را تغییر دهد" />}
+                          {editable ? <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground" /> : <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" aria-label="Only the responsible or the team can change the status." />}
                         </div>
                         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          {t.docNumber ? <span className="mono truncate">{t.docNumber}</span> : <span>تسک دستی</span>}
+                          {store.teamOf(t) && <TeamName team={store.teamById[store.teamOf(t)!]} />}
+                          {t.docNumber ? <span className="mono truncate">{t.docNumber}</span> : <span>New Manual Task</span>}
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <Assignee task={t} compact /><StatusPill task={t} status={statusOf(state,t)} />
@@ -301,20 +306,20 @@ export function KanbanView({ tasks, colorTeamId }: { tasks: Task[]; colorTeamId?
                       </div>
                     )
                   })}
-                  {col.length > 60 && <div className="py-1 text-center text-[11px] text-muted-foreground">و {n(col.length - 60)} تسک دیگر — از فیلترها استفاده کنید</div>}
+                  {col.length > 60 && <div className="py-1 text-center text-[11px] text-muted-foreground">and {n(col.length - 60)} Other Tasks — Use Filters</div>}
                 </div>
               </div>
             )
           })}
         </div>
       </div>
-      <p className="text-[11.5px] text-muted-foreground">کارت را بکشید و در ستون Status جدید رها کنید. روی موبایل، کارت را باز کنید و Status را از فهرست انتخاب کنید.</p>
+      <p className="text-[11.5px] text-muted-foreground">Pull the card and drop it in the new Status column. On the mobile, open the card and select Status from the list.</p>
     </div>
   )
 }
 
 // ---------------- Tree ----------------
-const KIND_LABEL: Record<string, string> = { project: 'پروژه', phase: 'Phase', stage: 'Stage', group: 'Group', doctype: 'Doc Type', document: 'Document', manual: 'دستی' }
+const KIND_LABEL: Record<string, string> = { project: 'Project', phase: 'Phase', stage: 'Stage', group: 'Group', doctype: 'Doc Type', document: 'Document', manual: "Hand-held" }
 
 export function TreeView({ tasks, depth = 2, columns=TREE_COLUMNS }: { tasks: Task[]; depth?: number; columns?:FieldKey[] }) {
   const grid={gridTemplateColumns:`minmax(280px,1fr) ${columns.map(()=>'140px').join(' ')}`,minWidth:280+columns.length*140}
@@ -347,8 +352,8 @@ export function TreeView({ tasks, depth = 2, columns=TREE_COLUMNS }: { tasks: Ta
         <div className={cn('grid items-center gap-3 border-b px-2 py-1.5 hover:bg-foreground/[0.035]', t.removedFromMdr && 'opacity-60')} style={grid}>
           <div className="flex min-w-0 items-center gap-1.5" style={{ paddingInlineStart: level * 18 }}>
             {ch.length ? (
-              <button className="rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => toggle(t.id, level)} aria-label={opened ? 'بستن' : 'باز کردن'}>
-                {opened ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+              <button className="rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => toggle(t.id, level)} aria-label={opened ? 'Close' : "Open"}>
+                {opened ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             ) : <span className="w-[18px]" />}
             <ProgressRing task={t} value={r?.progress ?? 0} size={18} stroke={2.5} label={false} />
@@ -357,7 +362,7 @@ export function TreeView({ tasks, depth = 2, columns=TREE_COLUMNS }: { tasks: Ta
             </button>
             <span className="hidden shrink-0 rounded border px-1 text-[10px] text-muted-foreground md:inline">{KIND_LABEL[t.kind]}</span>
             {t.docNumber && <span className="mono hidden shrink-0 text-[11px] text-muted-foreground lg:inline">{t.docNumber}</span>}
-            {t.weight != null && !work && <span className="num hidden shrink-0 text-[11px] text-muted-foreground xl:inline">وزن {n(t.weight, 1)}</span>}
+            {t.weight != null && !work && <span className="num hidden shrink-0 text-[11px] text-muted-foreground xl:inline">Weight {n(t.weight, 1)}</span>}
           </div>
           {columns.map(k=><div key={k} className="text-xs text-muted-foreground"><TaskColumn task={t} column={k} tree/></div>)}
         </div>
@@ -369,7 +374,7 @@ export function TreeView({ tasks, depth = 2, columns=TREE_COLUMNS }: { tasks: Ta
   return (
     <div className="overflow-x-auto glass-card">
       <div style={grid} className="grid gap-3 border-b bg-foreground/[0.03] px-2 py-2 text-[11.5px] font-medium text-muted-foreground">
-        <div>بخش‌های MDR (Parent/Child)</div>{columns.map(k=><div key={k}>{L(k)}</div>)}
+        <div>Departments of MDR (Parent/Child)</div>{columns.map(k=><div key={k}>{L(k)}</div>)}
       </div>
       {projects.map((p) => {
         const roots = (kids[`root:${p.id}`] ?? []).filter((c) => visible.has(c.id))
@@ -379,13 +384,13 @@ export function TreeView({ tasks, depth = 2, columns=TREE_COLUMNS }: { tasks: Ta
         return (
           <div key={p.id}>
             <div className="flex items-center gap-2 border-b bg-foreground/[0.025] px-2 py-2">
-              <button className="rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => toggle(id, 0)} aria-label="باز/بسته">
-                {opened ? <ChevronDown className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              <button className="rounded p-0.5 text-muted-foreground hover:bg-accent" onClick={() => toggle(id, 0)} aria-label="Open/Close">
+                {opened ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
               <ProgressRing project value={prog} size={22} stroke={3} label={false} />
               <button className="font-bold hover:text-azure hover:underline" onClick={() => dispatch({ type: 'nav', nav: { page: 'project', projectId: p.id } })}>{p.name}</button>
               <span className="mono text-[11px] text-muted-foreground">{p.code}</span>
-              <span className="num ms-auto text-[12px] text-muted-foreground">{n(Math.round(prog))}٪</span>
+              <span className="num ms-auto text-[12px] text-muted-foreground">{n(Math.round(prog))}%</span>
             </div>
             {opened && roots.map((t) => <Row key={t.id} t={t} level={1} />)}
           </div>
@@ -425,7 +430,7 @@ export function CalendarView({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
   const month0 = startOfJMonth(anchor)
   const jm = toJalali(month0)
   const title = mode === 'week'
-    ? `${digits(toJalali(week0).jd)} ${J_MONTHS[toJalali(week0).jm - 1]} تا ${digits(toJalali(addDays(week0, 6)).jd)} ${J_MONTHS[toJalali(addDays(week0, 6)).jm - 1]} ${digits(toJalali(addDays(week0, 6)).jy)}`
+    ? `${digits(toJalali(week0).jd)} ${J_MONTHS[toJalali(week0).jm - 1]} to ${digits(toJalali(addDays(week0, 6)).jd)} ${J_MONTHS[toJalali(addDays(week0, 6)).jm - 1]} ${digits(toJalali(addDays(week0, 6)).jy)}`
     : `${J_MONTHS[jm.jm - 1]} ${digits(jm.jy)}`
   const move = (k: number) => setAnchor(mode === 'week' ? addDays(week0, 7 * k) : addJMonths(month0, k))
 
@@ -433,12 +438,12 @@ export function CalendarView({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => move(-1)} aria-label="قبلی"><ChevronRight className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" className="h-8" onClick={() => setAnchor(TODAY)}>امروز</Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => move(1)} aria-label="بعدی"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => move(-1)} aria-label="Previous"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" className="h-8" onClick={() => setAnchor(TODAY)}>Today</Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => move(1)} aria-label="Next"><ChevronRight className="h-4 w-4" /></Button>
           <div className="ms-2 font-semibold">{title}</div>
         </div>
-        <Segmented size="sm" value={mode} onChange={setMode} options={[{ value: 'week', label: 'هفتگی' }, { value: 'month', label: 'ماهانه' }]} />
+        <Segmented size="sm" value={mode} onChange={setMode} options={[{ value: 'week', label: "Weekly" }, { value: 'month', label: "Monthly" }]} />
       </div>
       {mode === 'week' ? (
         <div className="grid grid-cols-1 overflow-hidden glass-card sm:grid-cols-7" id={`${idPrefix}-week`}>
@@ -457,7 +462,7 @@ export function CalendarView({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
                   {total > 0 && <span className="num text-[11px] text-muted-foreground">{n(total, 1)}h</span>}
                 </div>
                 {holidays.has(day) && <div className="mb-1.5 rounded bg-background/80 px-1.5 py-0.5 text-[11px] text-muted-foreground">{holidays.get(day)}</div>}
-                {isWeekend(day) && !items.length && <div className="text-[11px] text-muted-foreground">تعطیل</div>}
+                {isWeekend(day) && !items.length && <div className="text-[11px] text-muted-foreground">Holiday</div>}
                 <div className="flex flex-col gap-1">
                   {items.slice(0, 8).map(({ task, hours }) => {
                     const s = statusOf(state, task)
@@ -470,10 +475,10 @@ export function CalendarView({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
                       </button>
                     )
                   })}
-                  {items.length > 8 && <div className="text-[11px] text-muted-foreground">+{n(items.length - 8)} مورد</div>}
+                  {items.length > 8 && <div className="text-[11px] text-muted-foreground">+{n(items.length - 8)} The Case</div>}
                   {dues.map((t) => (
                     <button key={`due-${t.id}`} onClick={() => dispatch({ type: 'openTask', id: t.id })} className="flex items-center gap-1 text-start text-[11px] text-foreground hover:text-azure">
-                      <span className="h-2 w-2 shrink-0 rotate-45 border border-foreground" /> <span className="truncate">موعد: {t.name}</span>
+                      <span className="h-2 w-2 shrink-0 rotate-45 border border-foreground" /> <span className="truncate">Time: {t.name}</span>
                     </button>
                   ))}
                 </div>
@@ -485,9 +490,9 @@ export function CalendarView({ tasks, idPrefix }: { tasks: Task[]; idPrefix: str
         <MonthGrid month0={month0} dueByDay={dueByDay} holidays={holidays} onOpen={(id) => dispatch({ type: 'openTask', id })} />
       )}
       <div className="flex flex-wrap items-center gap-4 text-[11.5px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-1 rounded bg-azure" /> ساعات تخصیص‌یافته در آن روز</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-3 w-1 rounded bg-azure" /> dedicated hours that day</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rotate-45 border border-foreground" /> Due Date</span>
-        <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm border" /> پنجشنبه، جمعه و تعطیلات</span>
+        <span className="inline-flex items-center gap-1.5"><span className="hatch h-3 w-4 rounded-sm border" /> Thursday, Friday and Holiday</span>
       </div>
     </div>
   )
@@ -524,7 +529,7 @@ function MonthGrid({ month0, dueByDay, holidays, onOpen }: { month0: string; due
                     </button>
                   )
                 })}
-                {dues.length > 3 && <span className="text-[10.5px] text-muted-foreground">+{n(dues.length - 3)} مورد دیگر</span>}
+                {dues.length > 3 && <span className="text-[10.5px] text-muted-foreground">+{n(dues.length - 3)} Other item</span>}
               </div>
               {dues.length > 0 && <div className="mt-1 flex gap-0.5 sm:hidden">{dues.slice(0, 4).map((t) => <span key={t.id} style={taskColorStyle(state,t)} className="h-1.5 w-1.5 rounded-full bg-azure" />)}</div>}
             </div>

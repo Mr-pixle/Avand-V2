@@ -39,10 +39,10 @@ export class Core {
         const before = this.state.scores?.[key], after = clean.scores?.[key]
         if (before === after || (before?.score === after?.score && before?.error === after?.error && before?.userId === after?.userId && before?.teamId === after?.teamId && before?.projectId === after?.projectId)) continue
         const taskId = (after ?? before)!.taskId!, at = new Date().toISOString(), id = `score-${Date.now().toString(36)}-${this.seq++}`
-        const text = after ? after.error ?? `امتیاز جدید: ${after.score?.toFixed(2)}` : 'تسک دیگر در امتیاز محسوب نمی‌شود.'
+        const text = after ? after.error ?? `New Rating: ${after.score?.toFixed(2)}` : "It's no longer considered an advantage."
         clean.audit = [{ id: `a-${id}`, at, userId: next.session ?? 'system', taskId, kind: 'points', text }, ...clean.audit]
         for (const userId of new Set([before?.userId, after?.userId].filter((u): u is string => !!u))) {
-          clean.notifications = [{ id: `${id}-${userId}`, userId, at, kind: 'points', title: `امتیاز «${next.tasks[taskId]?.name ?? taskId}» به‌روز شد`, body: text, read: false, link: { type: 'page', page: 'mypoints' } }, ...clean.notifications]
+          clean.notifications = [{ id: `${id}-${userId}`, userId, at, kind: 'points', title: `Score for “${next.tasks[taskId]?.name ?? taskId}” updated`, body: text, read: false, link: { type: 'page', page: 'mypoints' } }, ...clean.notifications]
         }
       }
     }
